@@ -1591,3 +1591,18 @@ Stage Summary:
 - App is LIVE on port 3000 with the owner's live data; auto-restart via .zscripts/dev.sh on future boots.
 - Logins: admin@landmarkintergulf.com / Landmark@2025 (Super Admin), accountant@example.com / Accountant@2025, hr@example.com / HrManager@2025, viewer@example.com / Viewer@2025.
 - EPR sync BLOCKED on auth: no GitHub token in sandbox env; push to Nrifat10/EPR needs a PAT (repo currently empty). `git remote add epr` done — one command away once a token is provided.
+
+---
+Task ID: R15c-epr-push
+Agent: Z (main agent)
+Task: User supplied GitHub PAT — push project to github.com/Nrifat10/EPR and keep it synced ("ETAY SEND KORO" / "SYNC RAKHO").
+
+Work Log:
+- Stored PAT in .git/config only (never committed): epr remote → https://Nrifat10:TOKEN@github.com/Nrifat10/EPR.git.
+- ls-remote epr: auth OK, repo confirmed empty → pushed main (full history, incl. live db snapshot) → new branch main created, SHA verified local == remote (9b45239).
+- Rewrote scripts/sync-github.sh as DUAL-REPO sync: commit once, push origin (landmarkfinace/HR01) + epr (Nrifat10/EPR), each reported independently (a failure on one never blocks the other).
+- Ran sync: commit 90af622 → ✓ epr pushed; ✗ origin failed (PAT belongs to Nrifat10, no write access to landmarkfinace/HR01 — that repo stays at ba30a35 until its own credentials are provided).
+
+Stage Summary:
+- EPR IS the up-to-date mirror now (everything incl. latest ops commits); one command keeps both repos synced: bash scripts/sync-github.sh ["message"].
+- To update landmarkfinace/HR01 as well, provide a PAT with write access to that repo.
