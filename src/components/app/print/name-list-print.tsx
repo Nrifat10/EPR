@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { usePageRule } from '@/components/app/print/print-page-rule'
 import { formatDate } from '@/lib/format'
 import { useAppStore } from '@/lib/store'
-import type { NameListRow } from '@/lib/types'
+import type { NameListEntryRow } from '@/lib/types'
 
 export type NameListTypeCounts = {
   client: number
@@ -31,7 +31,7 @@ export function NameListPrintDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   /** All entries matching the current list filters (already fetched, every page) */
-  entries: NameListRow[]
+  entries: NameListEntryRow[]
   /** Per-type counts matching the search/status filters (type cards' numbers) */
   counts: NameListTypeCounts
   /** Human description of the active filters, e.g. "Suppliers · active" or "All entries" */

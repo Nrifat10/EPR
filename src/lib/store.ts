@@ -5,8 +5,10 @@ import type { AppSettings, SessionUser, ViewKey } from '@/lib/types'
 
 const DEFAULT_SETTINGS: AppSettings = {
   companyName: 'Landmark Inter Gulf',
+  companyNameAr: 'لاندمارك انتر جلف',
   address:
     'Al Suwedhi Business Centre, Office # 103, 1st Floor, P.O.Box 35712, Building 5526, 4th Street, Distt. Al Wahah, Jubail, Kingdom of Saudi Arabia',
+  addressAr: 'مركز السويدي التجاري، مكتب 103، الدور الأول، ص.ب. 35712، مبنى 5526، الشارع الرابع، حي الوها، الجبيل، المملكة العربية السعودية',
   phone: '+966 13 847 2200',
   email: 'info@landmarkintergulf.com',
   logo: '/logo-mark.png', // default brand ML monogram (public/logo-mark.png)
@@ -14,6 +16,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultPayType: 'bank_transfer',
   authorizedSignatory: '',
   signatoryTitle: 'Authorized Signatory',
+  vatNumber: '',
+  crNumber: '',
+  bankName: '',
+  bankIban: '',
+  bankAccountNumber: '',
+  bankAccountName: '',
+  bankSwiftCode: '',
+  bankAddress: '',
   vatRate: 15, // percent — Saudi standard VAT for the VAT Return Expense module
 }
 

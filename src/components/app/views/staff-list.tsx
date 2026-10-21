@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  ClipboardList,
   Download,
   Eye,
   FolderKanban,
@@ -74,6 +75,7 @@ import { AdvanceLedgerContent } from './advances'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StaffNameListHistory } from './staff-name-list-history'
 
 type StaffForm = {
   fullName: string
@@ -84,6 +86,11 @@ type StaffForm = {
   iqamaExpiry: string
   passportExpiry: string
   joiningDate: string
+  // Name List additions
+  passportNo: string
+  nationality: string
+  bloodGroup: string
+  experienceYears: string
   ratePerHour: string
   overtimeRate: string
   monthlySalary: string
@@ -102,6 +109,10 @@ const EMPTY_FORM: StaffForm = {
   iqamaExpiry: '',
   passportExpiry: '',
   joiningDate: '',
+  passportNo: '',
+  nationality: '',
+  bloodGroup: '',
+  experienceYears: '',
   ratePerHour: '',
   overtimeRate: '',
   monthlySalary: '',
@@ -244,6 +255,7 @@ export function StaffListView() {
 
   // View dialog
   const [viewing, setViewing] = useState<StaffRow | null>(null)
+  const [historyStaff, setHistoryStaff] = useState<StaffRow | null>(null)
   const [stats, setStats] = useState<StaffProfileStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
 
@@ -392,6 +404,10 @@ export function StaffListView() {
       iqamaExpiry: staff.iqamaExpiry ? staff.iqamaExpiry.slice(0, 10) : '',
       passportExpiry: staff.passportExpiry ? staff.passportExpiry.slice(0, 10) : '',
       joiningDate: staff.joiningDate ? staff.joiningDate.slice(0, 10) : '',
+      passportNo: staff.passportNo ?? '',
+      nationality: staff.nationality ?? '',
+      bloodGroup: staff.bloodGroup ?? '',
+      experienceYears: staff.experienceYears != null ? String(staff.experienceYears) : '',
       ratePerHour: staff.ratePerHour !== 0 ? String(staff.ratePerHour) : '',
       overtimeRate: staff.overtimeRate !== 0 ? String(staff.overtimeRate) : '',
       monthlySalary: staff.monthlySalary !== 0 ? String(staff.monthlySalary) : '',
@@ -461,6 +477,10 @@ export function StaffListView() {
         joiningDate: form.joiningDate || null,
         iqamaExpiry: form.iqamaExpiry || null,
         passportExpiry: form.passportExpiry || null,
+        passportNo: form.passportNo.trim() || null,
+        nationality: form.nationality.trim() || null,
+        bloodGroup: form.bloodGroup || null,
+        experienceYears: form.experienceYears ? Number(form.experienceYears) : null,
         ratePerHour: form.ratePerHour ? Number(form.ratePerHour) : 0,
         overtimeRate: form.overtimeRate ? Number(form.overtimeRate) : 0,
         monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : 0,
@@ -785,6 +805,16 @@ export function StaffListView() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-11 w-11 text-muted-foreground hover:text-foreground"
+                        onClick={() => setHistoryStaff(staff)}
+                        aria-label={`Name list history for ${staff.fullName}`}
+                        title="Name List history"
+                      >
+                        <ClipboardList className="h-4 w-4" />
+                      </Button>
                       {canEdit ? (
                         <Button
                           variant="ghost"
@@ -893,6 +923,16 @@ export function StaffListView() {
                           aria-label={`View ${staff.fullName}`}
                         >
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => setHistoryStaff(staff)}
+                          aria-label={`Name list history for ${staff.fullName}`}
+                          title="Name List history"
+                        >
+                          <ClipboardList className="h-4 w-4" />
                         </Button>
                         {canEdit ? (
                           <Button
@@ -1293,6 +1333,54 @@ export function StaffListView() {
                 onChange={(e) => setField('joiningDate', e.target.value)}
               />
             </div>
+            {/* Name List print fields */}
+            <div className="space-y-2">
+              <Label htmlFor="staff-nationality">Nationality</Label>
+              <Input
+                id="staff-nationality"
+                value={form.nationality}
+                onChange={(e) => setField('nationality', e.target.value)}
+                placeholder="e.g. Bangladesh"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="staff-passport-no">Passport No.</Label>
+              <Input
+                id="staff-passport-no"
+                value={form.passportNo}
+                onChange={(e) => setField('passportNo', e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="staff-blood">Blood Group</Label>
+              <Select
+                value={form.bloodGroup || 'none'}
+                onValueChange={(v) => setField('bloodGroup', v === 'none' ? '' : v)}
+              >
+                <SelectTrigger id="staff-blood">
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((b) => (
+                    <SelectItem key={b} value={b}>
+                      {b}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="staff-experience">Experience (years)</Label>
+              <Input
+                id="staff-experience"
+                type="number"
+                min={0}
+                max={60}
+                value={form.experienceYears}
+                onChange={(e) => setField('experienceYears', e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="staff-iqama-expiry">IQAMA Expiry</Label>
               <Input
@@ -1491,6 +1579,12 @@ export function StaffListView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Name List history (per employee) */}
+      <StaffNameListHistory
+        staff={historyStaff}
+        onOpenChange={(o) => !o && setHistoryStaff(null)}
+      />
     </div>
   )
 }

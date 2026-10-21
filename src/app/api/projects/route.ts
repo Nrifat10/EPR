@@ -119,10 +119,13 @@ export async function GET(req: NextRequest) {
     const p = parsePagination(searchParams)
     const search = (searchParams.get('search') ?? '').trim()
     const status = (searchParams.get('status') ?? '').trim()
+    // Name List site selector: only this client's projects
+    const clientId = (searchParams.get('clientId') ?? '').trim()
 
     const where: Prisma.ProjectWhereInput = {}
     if (search) where.name = { contains: search }
     if (status && PROJECT_STATUSES.includes(status)) where.status = status
+    if (clientId) where.clientId = clientId
 
     // KPI header: status counts + staff allocations + global income/expense
     const [total, projects, statusRows, staffAllocated, incomeAgg, expenseAgg] = await Promise.all([

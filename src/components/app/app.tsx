@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { AppSidebar } from '@/components/app/sidebar'
 import { Topbar } from '@/components/app/topbar'
 import { CommandPalette } from '@/components/app/command-palette'
+import { AiChatPanel } from '@/components/app/ai/chat-panel'
 import { LoginScreen } from '@/components/app/login-screen'
 import { ViewRouter } from '@/components/app/views/registry'
 import { api, setAuthToken } from '@/lib/api-client'
@@ -120,6 +121,7 @@ export function App() {
           </footer>
         </SidebarInset>
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        <AiChatPanel />
       </SidebarProvider>
       <Toaster richColors position="top-right" />
     </ThemeProvider>

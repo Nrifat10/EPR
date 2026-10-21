@@ -18,43 +18,45 @@ import type { ClientRow, ClientStatus } from '@/lib/types'
 
 const CLIENT_STATUSES = ['active', 'inactive']
 
+const nullableTrim = (v: unknown) =>
+  typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v
+
 export const clientSchema = z.object({
   name: z.preprocess(
     (v) => (typeof v === 'string' ? v.trim() : ''),
     z.string().min(1, 'Client name is required').max(120, 'Client name is too long')
   ),
-  contactPerson: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
+  nameAr: z.preprocess(nullableTrim, z.string().max(160).nullable()),
+  contactPerson: z.preprocess(nullableTrim, z.string().nullable()),
+  phone: z.preprocess(nullableTrim, z.string().nullable()),
+  email: z.preprocess(nullableTrim, z.string().nullable()),
+  address: z.preprocess(nullableTrim, z.string().nullable()),
+  addressAr: z.preprocess(nullableTrim, z.string().nullable()),
+  city: z.preprocess(nullableTrim, z.string().nullable()),
+  crNumber: z.preprocess(nullableTrim, z.string().nullable()),
+  // Saudi VAT registration number — 15 digits, starts & ends with 3
+  vatNumber: z.preprocess(
+    (v) => (typeof v === 'string' ? v.trim().replace(/[\s-]/g, '') || null : v ?? null),
+    z
+      .string()
+      .regex(/^\d{15}$/, 'VAT number must be exactly 15 digits (e.g. 3xxxxxxxxxxxxx3)')
+      .nullable()
   ),
-  phone: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
+  bankName: z.preprocess(nullableTrim, z.string().nullable()),
+  iban: z.preprocess(
+    (v) => (typeof v === 'string' ? v.replace(/\s/g, '').toUpperCase() : null),
+    z.string().max(34).nullable()
   ),
-  email: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
-  ),
-  address: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
-  ),
-  city: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
-  ),
-  crNumber: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
+  accountNumber: z.preprocess(nullableTrim, z.string().nullable()),
+  swiftCode: z.preprocess(
+    (v) => (typeof v === 'string' ? v.replace(/\s/g, '').toUpperCase() : null),
+    z.string().max(11).nullable()
   ),
   status: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
     z.enum(['active', 'inactive'], { error: 'Status must be active or inactive' }).optional()
   ),
-  notes: z.preprocess(
-    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v === undefined ? null : v),
-    z.string().nullable()
-  ),
+  notes: z.preprocess(nullableTrim, z.string().nullable()),
 })
 
 type ClientWithCounts = Prisma.ClientGetPayload<{
@@ -69,12 +71,19 @@ function toClientRow(c: ClientWithCounts): ClientRow {
   return {
     id: c.id,
     name: c.name,
+    nameAr: c.nameAr,
     contactPerson: c.contactPerson,
     phone: c.phone,
     email: c.email,
     address: c.address,
+    addressAr: c.addressAr,
     city: c.city,
     crNumber: c.crNumber,
+    vatNumber: c.vatNumber,
+    bankName: c.bankName,
+    iban: c.iban,
+    accountNumber: c.accountNumber,
+    swiftCode: c.swiftCode,
     status: c.status as ClientStatus,
     notes: c.notes,
     createdAt: c.createdAt.toISOString(),
@@ -97,9 +106,11 @@ export async function GET(req: NextRequest) {
     if (search) {
       where.OR = [
         { name: { contains: search } },
+        { nameAr: { contains: search } },
         { contactPerson: { contains: search } },
         { city: { contains: search } },
         { email: { contains: search } },
+        { vatNumber: { contains: search } },
       ]
     }
     if (status && CLIENT_STATUSES.includes(status)) where.status = status
@@ -166,12 +177,19 @@ export async function POST(req: NextRequest) {
     const client = await db.client.create({
       data: {
         name: data.name,
+        nameAr: data.nameAr,
         contactPerson: data.contactPerson,
         phone: data.phone,
         email: data.email,
         address: data.address,
+        addressAr: data.addressAr,
         city: data.city,
         crNumber: data.crNumber,
+        vatNumber: data.vatNumber,
+        bankName: data.bankName,
+        iban: data.iban,
+        accountNumber: data.accountNumber,
+        swiftCode: data.swiftCode,
         status: data.status ?? 'active',
         notes: data.notes,
       },

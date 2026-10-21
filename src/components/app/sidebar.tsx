@@ -13,9 +13,11 @@ import {
   LayoutDashboard,
   Landmark,
   ScrollText,
+  Sparkles,
   CalendarClock,
   Wallet,
   FileSpreadsheet,
+  FileOutput,
   BarChart3,
   TrendingUp,
   TrendingDown,
@@ -29,7 +31,6 @@ import {
   Network,
   ReceiptText,
   FileText,
-  BookCheck,
   Package,
   FileSignature,
   BookUser,
@@ -82,6 +83,7 @@ const MENU: MenuGroup[] = [
   {
     items: [
       { view: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, perm: 'dashboard.view' },
+      { view: 'ai-assistant', label: 'AI Assistant', icon: Sparkles, perm: 'ai.use' },
       { view: 'projects', label: 'Project Management', icon: FolderKanban, perm: 'projects.view' },
       { view: 'clients', label: 'Clients', icon: Building2, perm: 'clients.view' },
       { view: 'deployments', label: 'Worker Deployment', icon: Network, perm: 'clients.view' },
@@ -130,7 +132,7 @@ const MENU: MenuGroup[] = [
     label: 'Business Documents',
     items: [
       { view: 'quotations', label: 'Quotations', icon: FileText, perm: 'quotations.view' },
-      { view: 'invoices', label: 'Invoices', icon: BookCheck, perm: 'invoices.view' },
+      { view: 'e-invoices', label: 'E-Invoice', icon: FileOutput, perm: 'einvoices.view' },
       { view: 'supplier-pos', label: 'Supplier P.O.', icon: Package, perm: 'supplierpo.view' },
       { view: 'agreements', label: 'Agreements', icon: FileSignature, perm: 'agreements.view' },
       { view: 'name-list', label: 'Name List', icon: BookUser, perm: 'namelist.view' },

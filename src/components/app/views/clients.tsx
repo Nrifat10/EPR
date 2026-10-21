@@ -8,6 +8,7 @@ import {
   Eye,
   FileText,
   Hash,
+  Landmark,
   Loader2,
   Mail,
   MapPin,
@@ -63,27 +64,42 @@ import { buildCsv, csvFilename, downloadCsv } from '@/lib/csv'
 import { formatDate, formatMoney } from '@/lib/format'
 import { can, useAppStore } from '@/lib/store'
 import type { Client, ClientRow, ClientStatus, Paginated } from '@/lib/types'
+import { ClientNameLists } from './client-name-lists'
 
 type ClientForm = {
   name: string
+  nameAr: string
   contactPerson: string
   phone: string
   email: string
   city: string
   address: string
+  addressAr: string
   crNumber: string
+  vatNumber: string
+  bankName: string
+  iban: string
+  accountNumber: string
+  swiftCode: string
   status: ClientStatus
   notes: string
 }
 
 const EMPTY_FORM: ClientForm = {
   name: '',
+  nameAr: '',
   contactPerson: '',
   phone: '',
   email: '',
   city: '',
   address: '',
+  addressAr: '',
   crNumber: '',
+  vatNumber: '',
+  bankName: '',
+  iban: '',
+  accountNumber: '',
+  swiftCode: '',
   status: 'active',
   notes: '',
 }
@@ -166,7 +182,7 @@ export function ClientsView() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<ClientRow | null>(null)
   const [form, setForm] = useState<ClientForm>(EMPTY_FORM)
-  const [errors, setErrors] = useState<{ name?: string }>({})
+  const [errors, setErrors] = useState<{ name?: string; vatNumber?: string }>({})
   const [submitting, setSubmitting] = useState(false)
 
   // Detail dialog state
@@ -234,12 +250,19 @@ export function ClientsView() {
     setEditing(row)
     setForm({
       name: row.name,
+      nameAr: row.nameAr ?? '',
       contactPerson: row.contactPerson ?? '',
       phone: row.phone ?? '',
       email: row.email ?? '',
       city: row.city ?? '',
       address: row.address ?? '',
+      addressAr: row.addressAr ?? '',
       crNumber: row.crNumber ?? '',
+      vatNumber: row.vatNumber ?? '',
+      bankName: row.bankName ?? '',
+      iban: row.iban ?? '',
+      accountNumber: row.accountNumber ?? '',
+      swiftCode: row.swiftCode ?? '',
       status: row.status,
       notes: row.notes ?? '',
     })
@@ -249,21 +272,32 @@ export function ClientsView() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const nextErrors: { name?: string } = {}
+    const nextErrors: { name?: string; vatNumber?: string } = {}
     if (!form.name.trim()) nextErrors.name = 'Client name is required'
+    const vat = form.vatNumber.replace(/[\s-]/g, '')
+    if (vat && !/^\d{15}$/.test(vat)) {
+      nextErrors.vatNumber = 'VAT number must be exactly 15 digits (e.g. 3xxxxxxxxxxxxx3)'
+    }
     setErrors(nextErrors)
-    if (nextErrors.name) return
+    if (nextErrors.name || nextErrors.vatNumber) return
 
     try {
       setSubmitting(true)
       const body = {
         name: form.name.trim(),
+        nameAr: form.nameAr.trim(),
         contactPerson: form.contactPerson.trim(),
         phone: form.phone.trim(),
         email: form.email.trim(),
         city: form.city.trim(),
         address: form.address.trim(),
+        addressAr: form.addressAr.trim(),
         crNumber: form.crNumber.trim(),
+        vatNumber: vat,
+        bankName: form.bankName.trim(),
+        iban: form.iban.replace(/\s/g, ''),
+        accountNumber: form.accountNumber.trim(),
+        swiftCode: form.swiftCode.replace(/\s/g, '').toUpperCase(),
         status: form.status,
         notes: form.notes.trim(),
       }
@@ -330,15 +364,22 @@ export function ClientsView() {
       downloadCsv(
         csvFilename('clients'),
         buildCsv(
-          ['Client Name', 'Contact Person', 'Phone', 'Email', 'City', 'Address', 'CR Number', 'Status', 'Projects', 'Deployed Workers', 'Notes', 'Created'],
+          ['Client Name', 'Name (Arabic)', 'Contact Person', 'Phone', 'Email', 'City', 'Address', 'Address (Arabic)', 'CR Number', 'VAT Number', 'Bank', 'IBAN', 'Account Number', 'SWIFT', 'Status', 'Projects', 'Deployed Workers', 'Notes', 'Created'],
           all.map((c) => [
             c.name,
+            c.nameAr ?? '',
             c.contactPerson ?? '',
             c.phone ?? '',
             c.email ?? '',
             c.city ?? '',
             c.address ?? '',
+            c.addressAr ?? '',
             c.crNumber ?? '',
+            c.vatNumber ?? '',
+            c.bankName ?? '',
+            c.iban ?? '',
+            c.accountNumber ?? '',
+            c.swiftCode ?? '',
             c.status,
             c.projectCount,
             c.deployedWorkers,
@@ -500,9 +541,21 @@ export function ClientsView() {
                         </span>
                         <div className="min-w-0">
                           <p className="truncate font-semibold">{row.name}</p>
-                          {row.crNumber ? (
-                            <p className="truncate text-xs text-muted-foreground">CR {row.crNumber}</p>
+                          {row.nameAr ? (
+                            <p lang="ar" dir="rtl" className="truncate text-xs text-muted-foreground">
+                              {row.nameAr}
+                            </p>
                           ) : null}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            {row.vatNumber ? (
+                              <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-px font-mono text-[10px] font-semibold tabular-nums text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+                                VAT {row.vatNumber}
+                              </span>
+                            ) : null}
+                            {row.crNumber ? (
+                              <span className="text-xs text-muted-foreground">CR {row.crNumber}</span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
@@ -710,6 +763,22 @@ export function ClientsView() {
               />
               {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="client-name-ar">
+                Company Name — <span lang="ar" dir="rtl">الاسم بالعربية</span>
+              </Label>
+              <Input
+                id="client-name-ar"
+                lang="ar"
+                dir="rtl"
+                value={form.nameAr}
+                onChange={(e) => setForm((f) => ({ ...f, nameAr: e.target.value }))}
+                placeholder="e.g. شركة الهلال الخليج للمقاولات"
+              />
+              <p className="text-xs text-muted-foreground">
+                Printed bilingually on ZATCA tax invoices and agreements.
+              </p>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="client-contact">Contact Person</Label>
@@ -761,6 +830,19 @@ export function ClientsView() {
                 placeholder="Street / district"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="client-address-ar">
+                Address — <span lang="ar" dir="rtl">العنوان بالعربية</span>
+              </Label>
+              <Input
+                id="client-address-ar"
+                lang="ar"
+                dir="rtl"
+                value={form.addressAr}
+                onChange={(e) => setForm((f) => ({ ...f, addressAr: e.target.value }))}
+                placeholder="الشارع / الحي"
+              />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="client-cr">CR Number</Label>
@@ -773,23 +855,91 @@ export function ClientsView() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="client-status">Status</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => setForm((f) => ({ ...f, status: v as ClientStatus }))}
-                >
-                  <SelectTrigger id="client-status" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="client-vat">VAT Number</Label>
+                <Input
+                  id="client-vat"
+                  value={form.vatNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, vatNumber: e.target.value }))}
+                  placeholder="3XXXXXXXXXXXXX3"
+                  inputMode="numeric"
+                  className="font-mono"
+                  aria-invalid={!!errors.vatNumber}
+                />
+                {errors.vatNumber ? (
+                  <p className="text-xs text-destructive">{errors.vatNumber}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    15 digits — required on B2B tax invoices.
+                  </p>
+                )}
               </div>
+            </div>
+
+            {/* ---- Bank account ---- */}
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">Bank Account</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="client-bank">Bank Name</Label>
+                  <Input
+                    id="client-bank"
+                    value={form.bankName}
+                    onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+                    placeholder="e.g. Saudi National Bank"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-iban">IBAN</Label>
+                  <Input
+                    id="client-iban"
+                    value={form.iban}
+                    onChange={(e) => setForm((f) => ({ ...f, iban: e.target.value }))}
+                    placeholder="SA00 0000 0000 0000 0000 0000"
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-account">Account Number</Label>
+                  <Input
+                    id="client-account"
+                    value={form.accountNumber}
+                    onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value }))}
+                    placeholder="00000000000000"
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-swift">SWIFT Code</Label>
+                  <Input
+                    id="client-swift"
+                    value={form.swiftCode}
+                    onChange={(e) => setForm((f) => ({ ...f, swiftCode: e.target.value }))}
+                    placeholder="NCBKSAJE"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="client-status">Status</Label>
+              <Select
+                value={form.status}
+                onValueChange={(v) => setForm((f) => ({ ...f, status: v as ClientStatus }))}
+              >
+                <SelectTrigger id="client-status" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="client-notes">Notes</Label>
@@ -880,13 +1030,71 @@ export function ClientsView() {
                     '—'
                   )}
                 </DetailItem>
+                {client.nameAr ? (
+                  <DetailItem icon={Building2} label="Company Name — العربية">
+                    <span lang="ar" dir="rtl" className="truncate">
+                      {client.nameAr}
+                    </span>
+                  </DetailItem>
+                ) : null}
+                {client.addressAr ? (
+                  <DetailItem icon={MapPin} label="Address — العربية">
+                    <span lang="ar" dir="rtl" className="truncate">
+                      {client.addressAr}
+                    </span>
+                  </DetailItem>
+                ) : null}
                 <DetailItem icon={Hash} label="CR Number">
                   {client.crNumber ?? '—'}
+                </DetailItem>
+                <DetailItem icon={Hash} label="VAT Number">
+                  {client.vatNumber ? (
+                    <span className="font-mono tabular-nums">{client.vatNumber}</span>
+                  ) : (
+                    '—'
+                  )}
                 </DetailItem>
                 <DetailItem icon={Building2} label="Status">
                   <StatusBadge kind={client.status} />
                 </DetailItem>
               </div>
+
+              {client.bankName || client.iban || client.accountNumber ? (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="flex items-center gap-2">
+                    <Landmark className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Bank Account
+                    </p>
+                  </div>
+                  <div className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                    {client.bankName ? (
+                      <p>
+                        <span className="text-muted-foreground">Bank:</span>{' '}
+                        <span className="font-medium">{client.bankName}</span>
+                      </p>
+                    ) : null}
+                    {client.iban ? (
+                      <p className="truncate">
+                        <span className="text-muted-foreground">IBAN:</span>{' '}
+                        <span className="font-mono">{client.iban}</span>
+                      </p>
+                    ) : null}
+                    {client.accountNumber ? (
+                      <p>
+                        <span className="text-muted-foreground">Account:</span>{' '}
+                        <span className="font-mono">{client.accountNumber}</span>
+                      </p>
+                    ) : null}
+                    {client.swiftCode ? (
+                      <p>
+                        <span className="text-muted-foreground">SWIFT:</span>{' '}
+                        <span className="font-mono">{client.swiftCode}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
 
               {client.notes ? (
                 <div className="rounded-lg border bg-muted/30 p-3">
@@ -940,6 +1148,9 @@ export function ClientsView() {
               </div>
 
               <Separator />
+
+              {/* Name Lists — every list this company has, grouped by date */}
+              <ClientNameLists clientId={client.id} />
 
               {/* Deployed workers */}
               <div>

@@ -1,8 +1,11 @@
 // Quotations API — GET (paginated list + totals + year options) / POST (create).
-// Business document: quote numbers are auto-generated (QTN-YYYY-NNNN) and every
-// money figure (line totals, subtotal, VAT, total) is recomputed SERVER-side
-// from the items — the client's math is only a live preview, never trusted.
-// Filters: ?search (quote no / client / subject) ?status ?year ?page ?pageSize
+// Business document: quote numbers are auto-generated ({PREFIX}-YYYY-NNNN,
+// prefix editable per request, default QTN) and every money figure (line
+// totals, subtotal, VAT, total) is recomputed SERVER-side from the items —
+// the client's math is only a live preview, never trusted.
+// Signature/stamp assets are validated (PNG/JPEG ≤ 2 MB) and stored with
+// percent-of-A4 positions so print/PDF match the on-screen placement exactly.
+// Filters: ?search (quote no / client / subject / reference) ?status ?year ?page ?pageSize
 import { NextRequest } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
@@ -19,30 +22,32 @@ import {
   parseDate,
   logActivity,
 } from '@/lib/api-helpers'
-import { mapQuotation, quoteInclude } from './mappers'
-
-const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired'] as const
-
-const itemSchema = z.object({
-  description: z.string().min(1, 'Item description is required').max(500, 'Item description is too long'),
-  unit: z.string().nullable().optional(),
-  quantity: z.coerce
-    .number()
-    .positive('Quantity must be greater than 0')
-    .max(1_000_000, 'Quantity is too large'),
-  unitPrice: z.coerce
-    .number()
-    .min(0, 'Unit price cannot be negative')
-    .max(1_000_000_000, 'Unit price is too large'),
-})
+import {
+  mapQuotation,
+  quoteInclude,
+  QUOTE_STATUSES,
+  itemSchema,
+  assetSchema,
+  normalizeAssets,
+  normalizeItems,
+  computeTotals,
+  nextQuoteNumber,
+} from './mappers'
 
 const quotationSchema = z.object({
   clientId: z.string().trim().nullable().optional(),
   clientName: z.string().min(1, 'Client name is required').max(160, 'Client name is too long'),
   subject: z.string().nullable().optional(),
+  referenceNo: z.string().max(80, 'Reference number is too long').nullable().optional(),
   issueDate: z.string().min(1, 'Issue date is required'),
   validityDate: z.string().nullable().optional(),
   status: z.enum(QUOTE_STATUSES).optional(),
+  // Editable quote-number prefix (e.g. QTN, QT, EST) — 1–8 letters/digits
+  numberPrefix: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{1,8}$/, 'Prefix must be 1–8 letters or digits')
+    .optional(),
   discount: z.coerce
     .number()
     .min(0, 'Discount cannot be negative')
@@ -55,50 +60,17 @@ const quotationSchema = z.object({
     .optional(),
   notes: z.string().nullable().optional(),
   terms: z.string().nullable().optional(),
+  // ---- quotation template fields (boss's design) ----
+  projectName: z.string().max(200, 'Project name is too long').nullable().optional(),
+  projectLocation: z.string().max(200, 'Project location is too long').nullable().optional(),
+  contractPeriod: z.string().max(60, 'Contract period text is too long').nullable().optional(),
+  contractMonths: z.coerce.number().int().min(0).max(600, 'Contract months cannot exceed 600').nullable().optional(),
+  mobilization: z.string().max(120, 'Mobilization text is too long').nullable().optional(),
+  inclusions: z.string().max(4000, 'Inclusions text is too long').nullable().optional(),
+  exclusions: z.string().max(4000, 'Exclusions text is too long').nullable().optional(),
   items: z.array(itemSchema).min(1, 'At least one line item is required').max(200, 'Too many line items'),
+  assets: z.array(assetSchema).max(4, 'Too many assets').optional(),
 })
-
-/** Server-side math — single source of truth for every money figure. */
-function computeTotals(
-  items: { lineTotal: number }[],
-  discount: number,
-  vatRate: number
-) {
-  const subtotal = round2(items.reduce((sum, it) => sum + it.lineTotal, 0))
-  const vatAmount = round2((subtotal - discount) * vatRate)
-  const total = round2(subtotal - discount + vatAmount)
-  return { subtotal, vatAmount, total }
-}
-
-function normalizeItems(raw: z.infer<typeof itemSchema>[]) {
-  return raw.map((it, i) => {
-    const quantity = round2(it.quantity)
-    const unitPrice = round2(it.unitPrice)
-    return {
-      sr: i + 1,
-      description: it.description.trim(),
-      unit: it.unit?.trim() || null,
-      quantity,
-      unitPrice,
-      lineTotal: round2(quantity * unitPrice),
-    }
-  })
-}
-
-/** Next quote number for a year: QTN-YYYY-NNNN (max existing + 1). */
-async function nextQuoteNumber(tx: Prisma.TransactionClient, year: number): Promise<string> {
-  const prefix = `QTN-${year}-`
-  const existing = await tx.quotation.findMany({
-    where: { quoteNumber: { startsWith: prefix } },
-    select: { quoteNumber: true },
-  })
-  let max = 0
-  for (const row of existing) {
-    const n = parseInt(row.quoteNumber.slice(prefix.length), 10)
-    if (Number.isInteger(n) && n > max) max = n
-  }
-  return `${prefix}${String(max + 1).padStart(4, '0')}`
-}
 
 /** Distinct issue-date years present in the table (for the year filter). */
 async function quotationYears(): Promise<number[]> {
@@ -117,13 +89,14 @@ export async function GET(req: NextRequest) {
     const p = parsePagination(sp)
     const where: Prisma.QuotationWhereInput = {}
 
-    // Free-text search across quote number, client name and subject
+    // Free-text search across quote number, client name, subject and reference
     const search = sp.get('search')?.trim()
     if (search) {
       where.OR = [
         { quoteNumber: { contains: search } },
         { clientName: { contains: search } },
         { subject: { contains: search } },
+        { referenceNo: { contains: search } },
       ]
     }
 
@@ -228,7 +201,12 @@ export async function POST(req: NextRequest) {
     }
     if (!clientName) return badRequest('Client name is required')
 
-    const items = normalizeItems(body.items)
+    const { items, error: itemError } = normalizeItems(body.items)
+    if (itemError || !items) return badRequest(itemError ?? 'Invalid line items')
+
+    const { assets, error: assetError } = normalizeAssets(body.assets ?? [])
+    if (assetError || !assets) return badRequest(assetError ?? 'Invalid signature/stamp assets')
+
     const discount = round2(body.discount ?? 0)
     const vatRate = body.vatRate ?? 0.15
     const { subtotal, vatAmount, total } = computeTotals(items, discount, vatRate)
@@ -237,14 +215,16 @@ export async function POST(req: NextRequest) {
     }
 
     const year = issueDate.getFullYear()
+    const prefix = (body.numberPrefix ?? 'QTN').toUpperCase()
     const created = await db.$transaction(async (tx) => {
-      const quoteNumber = await nextQuoteNumber(tx, year)
+      const quoteNumber = await nextQuoteNumber(tx, year, prefix)
       return tx.quotation.create({
         data: {
           quoteNumber,
           clientId,
           clientName,
           subject: body.subject?.trim() || null,
+          referenceNo: body.referenceNo?.trim() || null,
           issueDate,
           validityDate,
           status: body.status ?? 'draft',
@@ -255,8 +235,16 @@ export async function POST(req: NextRequest) {
           total,
           notes: body.notes?.trim() || null,
           terms: body.terms?.trim() || null,
+          projectName: body.projectName?.trim() || null,
+          projectLocation: body.projectLocation?.trim() || null,
+          contractPeriod: body.contractPeriod?.trim() || null,
+          contractMonths: body.contractMonths ?? null,
+          mobilization: body.mobilization?.trim() || null,
+          inclusions: body.inclusions?.trim() || null,
+          exclusions: body.exclusions?.trim() || null,
           createdByName: auth.name,
           items: { create: items },
+          assets: assets.length ? { create: assets } : undefined,
         },
         include: { ...quoteInclude, items: true },
       })

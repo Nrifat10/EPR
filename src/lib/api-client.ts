@@ -35,10 +35,13 @@ export class ApiError extends Error {
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = getAuthToken()
+  const isForm = options?.body instanceof FormData
   const res = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      // FormData bodies must NOT carry a JSON content-type — the browser sets
+      // the multipart boundary itself.
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers ?? {}),
     },
@@ -71,7 +74,11 @@ export const api = {
     request<T>(url, { method: 'POST', body: JSON.stringify(data) }),
   put: <T>(url: string, data: unknown) =>
     request<T>(url, { method: 'PUT', body: JSON.stringify(data) }),
+  patch: <T>(url: string, data: unknown) =>
+    request<T>(url, { method: 'PATCH', body: JSON.stringify(data) }),
   del: <T>(url: string) => request<T>(url, { method: 'DELETE' }),
+  /** multipart upload — the browser sets the Content-Type boundary itself */
+  postForm: <T>(url: string, form: FormData) => request<T>(url, { method: 'POST', body: form }),
 }
 
 /** Build a query string from an object, skipping empty/null/undefined values. */

@@ -58,6 +58,19 @@ const staffSchema = z.object({
   joiningDate: optionalText,
   iqamaExpiry: optionalText,
   passportExpiry: optionalText,
+  // ---- Name List additions ----
+  passportNo: optionalText,
+  nationality: optionalText,
+  bloodGroup: optionalText,
+  experienceYears: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+    z
+      .number()
+      .int('Experience must be a whole number of years')
+      .min(0, 'Experience cannot be negative')
+      .max(60, 'Experience looks too high')
+      .nullable()
+  ),
   ratePerHour: money('Rate per hour'),
   overtimeRate: money('Overtime rate'),
   monthlySalary: money('Monthly salary'),
@@ -101,6 +114,11 @@ function toStaffRow(s: StaffWithRelations): StaffRow {
     status: s.status as StaffStatus,
     staffCategory: s.staffCategory,
     projects: s.projects.map((ps) => ps.project),
+    passportNo: s.passportNo,
+    nationality: s.nationality,
+    bloodGroup: s.bloodGroup,
+    experienceYears: s.experienceYears,
+    deploymentStatus: s.deploymentStatus,
   }
 }
 
@@ -203,6 +221,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             joiningDate,
             iqamaExpiry,
             passportExpiry,
+            passportNo: data.passportNo,
+            nationality: data.nationality,
+            bloodGroup: data.bloodGroup,
+            experienceYears: data.experienceYears,
             ratePerHour: data.ratePerHour,
             overtimeRate: data.overtimeRate,
             monthlySalary: data.monthlySalary,

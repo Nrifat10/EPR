@@ -19,7 +19,7 @@ import { AccountsSummaryView } from './accounts-summary'
 import { TransactionCategoriesView } from './transaction-categories'
 import { VatReturnExpenseView } from './vat-return-expense'
 import { QuotationsView } from './quotations'
-import { InvoicesView } from './invoices'
+import { EInvoicesView } from './e-invoices'
 import { NameListView } from './name-list'
 import { SupplierPosView } from './supplier-pos'
 import { AgreementsView } from './agreements'
@@ -27,6 +27,7 @@ import { RolesView } from './roles'
 import { UsersView } from './users'
 import { SettingsView } from './settings'
 import { ActivityLogView } from './activity-log'
+import { AiAssistantView } from './ai-assistant'
 
 export function ViewRouter() {
   const { view } = useAppStore()
@@ -67,8 +68,8 @@ export function ViewRouter() {
       return <VatReturnExpenseView />
     case 'quotations':
       return <QuotationsView />
-    case 'invoices':
-      return <InvoicesView />
+    case 'e-invoices':
+      return <EInvoicesView />
     case 'name-list':
       return <NameListView />
     case 'supplier-pos':
@@ -83,6 +84,8 @@ export function ViewRouter() {
       return <SettingsView />
     case 'activity-log':
       return <ActivityLogView />
+    case 'ai-assistant':
+      return <AiAssistantView />
     default:
       return <DashboardView />
   }

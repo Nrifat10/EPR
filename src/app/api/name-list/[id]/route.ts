@@ -2,7 +2,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import type { NameListRow } from '@/lib/types'
+import type { NameListEntryRow } from '@/lib/types'
 import {
   ok,
   badRequest,
@@ -44,7 +44,7 @@ function mapEntry(e: {
   status: string
   notes: string | null
   createdAt: Date
-}): NameListRow {
+}): NameListEntryRow {
   return {
     id: e.id,
     name: e.name,

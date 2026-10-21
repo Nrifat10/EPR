@@ -109,6 +109,11 @@ function toStaffRow(s: Prisma.StaffGetPayload<{
     status: s.status as StaffStatus,
     staffCategory: s.staffCategory,
     projects: s.projects.map((ps) => ps.project),
+    passportNo: s.passportNo,
+    nationality: s.nationality,
+    bloodGroup: s.bloodGroup,
+    experienceYears: s.experienceYears,
+    deploymentStatus: s.deploymentStatus,
   }
 }
 

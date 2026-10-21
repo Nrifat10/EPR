@@ -64,6 +64,19 @@ const staffSchema = z.object({
   joiningDate: optionalText,
   iqamaExpiry: optionalText,
   passportExpiry: optionalText,
+  // ---- Name List additions ----
+  passportNo: optionalText,
+  nationality: optionalText,
+  bloodGroup: optionalText,
+  experienceYears: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
+    z
+      .number()
+      .int('Experience must be a whole number of years')
+      .min(0, 'Experience cannot be negative')
+      .max(60, 'Experience looks too high')
+      .nullable()
+  ),
   ratePerHour: money('Rate per hour'),
   overtimeRate: money('Overtime rate'),
   monthlySalary: money('Monthly salary'),
@@ -107,6 +120,11 @@ function toStaffRow(s: StaffWithRelations): StaffRow {
     status: s.status as StaffStatus,
     staffCategory: s.staffCategory,
     projects: s.projects.map((ps) => ps.project),
+    passportNo: s.passportNo,
+    nationality: s.nationality,
+    bloodGroup: s.bloodGroup,
+    experienceYears: s.experienceYears,
+    deploymentStatus: s.deploymentStatus,
   }
 }
 
@@ -128,17 +146,28 @@ export async function GET(req: NextRequest) {
     const categoryId = (searchParams.get('categoryId') ?? '').trim()
     const status = (searchParams.get('status') ?? '').trim()
     const expiry = (searchParams.get('expiry') ?? '').trim()
+    // Name List picker extras
+    const nationality = (searchParams.get('nationality') ?? '').trim()
+    const deployment = (searchParams.get('deploymentStatus') ?? '').trim()
 
     const now = new Date()
     const windowEnd = new Date(now.getTime() + EXPIRY_WINDOW_DAYS * 86_400_000)
 
     const where: Prisma.StaffWhereInput = { deletedAt: null }
     if (search) {
-      where.OR = [{ fullName: { contains: search } }, { iqamaId: { contains: search } }]
+      where.OR = [
+        { fullName: { contains: search } },
+        { iqamaId: { contains: search } },
+        { passportNo: { contains: search } },
+        { phone: { contains: search } },
+        { id: { contains: search } },
+      ]
     }
     if (projectId) where.projects = { some: { projectId } }
     if (categoryId) where.staffCategoryId = categoryId
     if (status && STAFF_STATUSES.includes(status)) where.status = status
+    if (nationality) where.nationality = { contains: nationality }
+    if (deployment) where.deploymentStatus = deployment
     if (expiry && EXPIRY_FILTERS.includes(expiry)) {
       if (expiry === 'expired') where.iqamaExpiry = { lt: now }
       else if (expiry === 'expiring') where.iqamaExpiry = { gte: now, lte: windowEnd }
@@ -241,6 +270,10 @@ export async function POST(req: NextRequest) {
           joiningDate,
           iqamaExpiry,
           passportExpiry,
+          passportNo: data.passportNo,
+          nationality: data.nationality,
+          bloodGroup: data.bloodGroup,
+          experienceYears: data.experienceYears,
           ratePerHour: data.ratePerHour,
           overtimeRate: data.overtimeRate,
           monthlySalary: data.monthlySalary,

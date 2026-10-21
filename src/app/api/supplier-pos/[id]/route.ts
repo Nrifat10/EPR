@@ -18,7 +18,7 @@ import {
   parseDate,
   logActivity,
 } from '@/lib/api-helpers'
-import { mapPo, poInclude } from '../mappers'
+import { mapPo, poInclude, resolveSupplierLink } from '../mappers'
 
 const PO_STATUSES = ['draft', 'ordered', 'received', 'cancelled'] as const
 
@@ -38,11 +38,23 @@ const itemSchema = z.object({
 const poUpdateSchema = z.object({
   poNumber: z.string().min(1).max(40).optional(), // normally not edited (auto-generated)
   supplierName: z.string().min(1, 'Supplier name is required').max(160, 'Supplier name is too long'),
+  supplierId: z.string().nullable().optional(), // link to the saved suppliers directory
+  saveSupplier: z.boolean().optional(), // "save this supplier for future P.O.s"
   supplierPhone: z.string().nullable().optional(),
   attention: z.string().nullable().optional(),
   issueDate: z.string().min(1, 'Issue date is required'),
   expectedDate: z.string().nullable().optional(),
   status: z.enum(PO_STATUSES),
+  quotationRef: z.string().nullable().optional(),
+  paymentTerms: z.string().nullable().optional(),
+  workSite: z.string().nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  durationMonths: z.coerce.number().int().min(1).max(600).nullable().optional(),
+  workingHours: z.string().nullable().optional(),
+  hoursPerMonth: z.coerce.number().int().min(1).max(744).nullable().optional(),
+  supplierAddress: z.string().nullable().optional(),
+  supplierVat: z.string().nullable().optional(),
+  supplierCr: z.string().nullable().optional(),
   vatRate: z.coerce
     .number()
     .min(0, 'VAT rate cannot be negative')
@@ -99,10 +111,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const expectedDate = parseDate(body.expectedDate)
     if (body.expectedDate && !expectedDate) return badRequest('Invalid expected date')
 
+    const startDate = parseDate(body.startDate)
+    if (body.startDate && !startDate) return badRequest('Invalid start date')
+
     const supplierName = body.supplierName.trim()
     if (!supplierName) return badRequest('Supplier name is required')
 
-    // Server-side math — line totals, subtotal, VAT, total
+    // Server-side math — line totals, subtotal, VAT, total.
+    // Manpower mode: AMOUNT = workers × hourly rate × hours/month.
+    const hoursPerMonth = body.hoursPerMonth ?? null
     const items = body.items.map((it, i) => {
       const quantity = round2(it.quantity)
       const unitPrice = round2(it.unitPrice)
@@ -112,7 +129,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
         unit: it.unit?.trim() || null,
         quantity,
         unitPrice,
-        lineTotal: round2(quantity * unitPrice),
+        lineTotal: round2(quantity * unitPrice * (hoursPerMonth ?? 1)),
       }
     })
     const vatRate = body.vatRate ?? 0.15
@@ -135,16 +152,39 @@ export async function PUT(req: NextRequest, { params }: Params) {
     // Full replace: items are deleted and recreated in the same transaction
     const updated = await db.$transaction(async (tx) => {
       await tx.supplierPoItem.deleteMany({ where: { poId: id } })
+      // saved-supplier directory link (explicit pick or find-or-create)
+      const supplierId = await resolveSupplierLink(tx, {
+        supplierId: body.supplierId ?? null,
+        saveSupplier: body.saveSupplier,
+        name: supplierName,
+        phone: body.supplierPhone?.trim() || null,
+        attention: body.attention?.trim() || null,
+        address: body.supplierAddress?.trim() || null,
+        vat: body.supplierVat?.trim() || null,
+        cr: body.supplierCr?.trim() || null,
+        createdByName: auth.name,
+      })
       return tx.supplierPo.update({
         where: { id },
         data: {
           ...(poNumber ? { poNumber } : {}),
+          supplierId,
           supplierName,
           supplierPhone: body.supplierPhone?.trim() || null,
           attention: body.attention?.trim() || null,
           issueDate,
           expectedDate,
           status: body.status,
+          quotationRef: body.quotationRef?.trim() || null,
+          paymentTerms: body.paymentTerms?.trim() || null,
+          workSite: body.workSite?.trim() || null,
+          startDate,
+          durationMonths: body.durationMonths ?? null,
+          workingHours: body.workingHours?.trim() || null,
+          hoursPerMonth,
+          supplierAddress: body.supplierAddress?.trim() || null,
+          supplierVat: body.supplierVat?.trim() || null,
+          supplierCr: body.supplierCr?.trim() || null,
           subtotal,
           vatRate,
           vatAmount,

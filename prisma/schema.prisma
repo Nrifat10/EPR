@@ -22,6 +22,7 @@ model User {
   sessions             Session[]
   operatedTransactions Transaction[] @relation("Operator")
   vatBills             VatExpenseBill[] @relation("VatBillCreator")
+  aiChats              AiChat[] @relation("AiChatOwner")
 }
 
 model Session {
@@ -54,12 +55,23 @@ model Setting {
 model Client {
   id            String    @id @default(cuid())
   name          String    @unique
+  // Arabic company name (printed bilingually on ZATCA-style invoices)
+  nameAr        String?
   contactPerson String?
   phone         String?
   email         String?
   address       String?
+  addressAr     String? // Arabic address
   city          String?
   crNumber      String? // Saudi commercial registration number
+  // Saudi VAT registration number (15 digits, starts & ends with 3) — printed
+  // on the buyer block of standard (B2B) ZATCA tax invoices
+  vatNumber     String?
+  // ---- Client bank account (for payments/references) ----
+  bankName      String?
+  iban          String? // SA.. 24 chars for Saudi accounts
+  accountNumber String?
+  swiftCode     String?
   status        String    @default("active") // active | inactive
   notes         String?
   createdAt     DateTime  @default(now())
@@ -67,8 +79,9 @@ model Client {
 
   projects    Project[]
   quotations  Quotation[]
-  invoices    Invoice[]
   agreements  Agreement[]
+  eInvoices   EInvoice[] @relation("EInvoiceClient")
+  nameLists   NameList[] @relation("NameListClient")
 
   @@index([status])
 }
@@ -91,6 +104,7 @@ model Project {
   attendances  Attendance[]
   payrolls     Payroll[]
   transactions Transaction[]
+  nameLists    NameList[] @relation("NameListProject")
 
   @@index([status])
   @@index([clientId])
@@ -123,6 +137,15 @@ model Staff {
   profilePhoto       String?
   residentialAddress String?
   status             String         @default("active") // active | inactive
+  // ---- Name List module additions (additive — safe columns) ----
+  passportNo         String? // passport number (Name List mobilization print)
+  nationality        String? // printed on name lists
+  bloodGroup         String? // printed in a red capsule on mobilization lists
+  experienceYears    Int? // "Exp. (yrs)" column on interview lists
+  // deployment lifecycle: available → in_interview → selected → deployed
+  // (back to available after demobilization). Existing on-leave/exit flows
+  // keep using `status` — this column only tracks the deployment pipeline.
+  deploymentStatus   String         @default("available")
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   deletedAt          DateTime?
@@ -132,9 +155,11 @@ model Staff {
   payrolls    Payroll[]
   advances    WorkerAdvance[]
   expenses    Transaction[]    @relation("ExpenseSpender")
+  nameListWorkers NameListWorker[]
 
   @@index([staffCategoryId])
   @@index([status])
+  @@index([deploymentStatus])
 }
 
 model ProjectStaff {
@@ -142,6 +167,8 @@ model ProjectStaff {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   staffId   String
   staff     Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  // set by completed Mobilization lists (start date = list date)
+  assignedAt DateTime?
 
   @@id([projectId, staffId])
   @@index([staffId])
@@ -363,6 +390,8 @@ model Quotation {
   client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientName   String // snapshot / free-text party (for non-registered clients)
   subject      String?
+  // Optional client / PO reference shown on the document ("Ref No")
+  referenceNo  String?
   issueDate    DateTime
   validityDate DateTime?
   status       String        @default("draft") // draft | sent | accepted | rejected | expired
@@ -373,14 +402,63 @@ model Quotation {
   total        Float         @default(0)
   notes        String?
   terms        String?
+  // ---- Quotation template fields (boss's design) ----
+  projectName     String? // "Residential Complex - Dammam" (PROJECT DETAILS box)
+  projectLocation String? // "Al Faisaliyah, Dammam"
+  contractPeriod  String? // free text, e.g. "12 Months" (PROJECT DETAILS box)
+  contractMonths  Int?    // numeric months - drives the Contract Value row (total x months)
+  mobilization    String? // e.g. "7 days from P.O."
+  inclusions      String? // newline-separated bullet list (INCLUDED box)
+  exclusions      String? // newline-separated bullet list (EXCLUDED box)
   createdByName String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  items QuotationItem[]
+  items  QuotationItem[]
+  assets QuotationAsset[]
 
   @@index([issueDate])
   @@index([status])
+}
+
+// Signature / stamp image placed on the quotation document. Positions and
+// sizes are stored as PERCENTAGES of the A4 page (210×297mm) so they scale
+// exactly the same on screen, in print and in the exported PDF.
+model QuotationAsset {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  type        String // 'signature' | 'stamp'
+  dataUrl     String // base64 data URL (PNG/JPEG, validated ≤ 2 MB)
+  posX        Float     @default(70) // left edge, % of page width
+  posY        Float     @default(80) // top edge, % of page height
+  width       Float     @default(18) // image width, % of page width
+  rotation    Float     @default(0) // degrees, clockwise
+  visible     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId])
+}
+
+// Single-row company letterhead configuration for A4 business documents.
+// mode: 'none' (styled text header) | 'header' | 'header_footer' | 'full'.
+model CompanyLetterhead {
+  id                 String   @id @default(cuid())
+  mode               String   @default("none")
+  headerImage        String? // data URL — repeats at the top of every page
+  footerImage        String? // data URL — repeats at the bottom of every page
+  fullPageImage      String? // data URL — full A4 background on every page
+  showCompanyDetails Boolean  @default(true) // textual company block on/off
+  headerHeightMm     Float    @default(30) // reserved top band (mm) on A4
+  footerHeightMm     Float    @default(18) // reserved bottom band (mm) on A4
+  updatedAt          DateTime @updatedAt
+}
+
+// Single-row default Terms & Conditions that auto-fills new quotations.
+model DefaultTerms {
+  id        String   @id @default(cuid())
+  content   String
+  updatedAt DateTime @updatedAt
 }
 
 model QuotationItem {
@@ -392,49 +470,14 @@ model QuotationItem {
   unit        String?
   quantity    Float     @default(1)
   unitPrice   Float     @default(0)
-  lineTotal   Float     @default(0)
+  discount    Float     @default(0) // per-line discount amount (currency)
+  lineTotal   Float     @default(0) // qty × unitPrice − discount
+  // ---- Quotation template columns ----
+  subText      String?  // gray detail line under the category name (e.g. "Licensed, SCE-classified")
+  ratePerHour  Float?   // SAR/hour basis (Rate / Hour column)
+  hoursPerMonth Float?  // hours/month basis (Hours / Month column); rate x hours = unitPrice
 
   @@index([quotationId])
-}
-
-model Invoice {
-  id            String    @id @default(cuid())
-  invoiceNumber String    @unique // e.g. INV-2026-0001
-  clientId      String?
-  client        Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  clientName    String
-  subject       String?
-  issueDate     DateTime
-  dueDate       DateTime?
-  status        String    @default("draft") // draft | issued | paid | cancelled
-  subtotal      Float     @default(0)
-  vatRate       Float     @default(0.15)
-  vatAmount     Float     @default(0)
-  total         Float     @default(0)
-  paidAmount    Float     @default(0)
-  notes         String?
-  createdByName String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  items InvoiceItem[]
-
-  @@index([issueDate])
-  @@index([status])
-}
-
-model InvoiceItem {
-  id          String   @id @default(cuid())
-  invoiceId   String
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sr          Int      @default(1)
-  description String
-  unit        String?
-  quantity    Float    @default(1)
-  unitPrice   Float    @default(0)
-  lineTotal   Float    @default(0)
-
-  @@index([invoiceId])
 }
 
 // Simple company/person directory (clients, suppliers, subcontractors, others)
@@ -458,20 +501,143 @@ model NameListEntry {
   @@index([name])
 }
 
+// ── Name List module (worker deployment lists) ─────────────────────────────
+// Every day workers are sent to client companies for interviews or
+// mobilization. Each list is a separate record with its own NL-YYYY-0001
+// number, a subject (purpose) and its workers picked from the Staff table.
+
+// Subject catalog — the 5 system subjects ship with the module; admins can
+// add more in Settings (each gets a badge colour and a template kind).
+model NameListSubject {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  // badge colour (hex) — Interview #2F6FB0, Mobilization #2E7D5B,
+  // Trade Test #C98A1B, Medical #132A4A, Demobilization #6B7488
+  color     String   @default("#6B7488")
+  // template kind: 'interview' (result workflow, tick-box print) or
+  // 'mobilization' (site assignment workflow, passport/blood print)
+  kind      String   @default("interview")
+  sortOrder Int      @default(0)
+  isSystem  Boolean  @default(false) // system subjects cannot be deleted
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lists NameList[]
+}
+
+model NameList {
+  id         String   @id @default(cuid())
+  listNo     String   @unique // NL-YYYY-0001 — continues from the highest number
+  year       Int // year part of listNo for fast max-seq lookups
+  seq        Int // numeric part of listNo
+  date       DateTime // list date (day the workers are sent)
+  time       String? // e.g. "09:00"
+  clientId   String
+  client     Client   @relation("NameListClient", fields: [clientId], references: [id])
+  location   String? // interview place / office
+  projectId  String? // site for mobilization / demobilization lists
+  project    Project? @relation("NameListProject", fields: [projectId], references: [id], onDelete: SetNull)
+  subjectId  String
+  subject    NameListSubject @relation(fields: [subjectId], references: [id])
+  positions  String? // JSON array of requested trades, e.g. ["Electrician","Mason"]
+  clientContact String? // client contact person
+  clientPhone   String? // client contact phone
+  transport     String? // e.g. "Company bus · Vehicle 12 · Driver Salim"
+  // link to the interview list this mobilization was created from
+  refInterviewListId String?
+  refInterviewList   NameList?  @relation("InterviewToMob", fields: [refInterviewListId], references: [id], onDelete: SetNull)
+  mobFromInterviews  NameList[] @relation("InterviewToMob")
+  refPoNo        String? // optional client PO / reference number
+  notes          String?
+  status         String   @default("draft") // draft | sent | completed | cancelled
+  // JSON snapshot of the visible-columns setting for this list
+  columns        String?
+  // uploaded signed/stamped client copy (scan or photo)
+  signedCopyExt  String?
+  signedCopyName String?
+  createdById    String?
+  createdByName  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workers NameListWorker[]
+
+  @@index([clientId, date])
+  @@index([status])
+  @@index([subjectId])
+  @@index([year, seq])
+  @@index([date])
+}
+
+// A worker row inside a list — always references a real Staff record.
+model NameListWorker {
+  id         String   @id @default(cuid())
+  nameListId String
+  nameList   NameList @relation(fields: [nameListId], references: [id], onDelete: Cascade)
+  staffId    String
+  staff      Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0) // manual drag order
+  // interview-kind results: selected | rejected | absent | onhold
+  result     String?
+  remarks    String? // e.g. offered rate, rejection reason
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([nameListId, staffId])
+  @@index([staffId])
+  @@index([result])
+}
+
+// Saved supplier directory — the boss asked for an "add supplier" option inside
+// the Supplier P.O. module so frequently-used suppliers are stored once and
+// picked from a dropdown on every new P.O. (details auto-fill).
+model Supplier {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  contactPerson String? // default "Attention / Attn" on new P.O.s
+  phone         String?
+  email         String?
+  address       String?
+  vatNumber     String? // Saudi VAT reg no (15 digits)
+  crNumber      String? // Commercial Registration no
+  status        String    @default("active") // active | inactive
+  notes         String?
+  createdByName String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  purchaseOrders SupplierPo[]
+
+  @@index([status])
+}
+
 model SupplierPo {
   id            String    @id @default(cuid())
-  poNumber      String    @unique // e.g. PO-2026-0001
+  poNumber      String    @unique // e.g. MPO-2026-0001
+  supplierId    String? // link to the saved Supplier directory (optional)
+  supplier      Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   supplierName  String
   supplierPhone String?
   attention     String?
   issueDate     DateTime
   expectedDate  DateTime?
   status        String    @default("draft") // draft | ordered | received | cancelled
+  // ── manpower P.O. template fields ──
+  quotationRef  String? // ORDER — linked quotation reference
+  paymentTerms  String? // ORDER — e.g. "Net 30 Days"
+  workSite      String? // ASSIGNMENT — e.g. "Dammam - Al Faisaliyah"
+  startDate     DateTime? // ASSIGNMENT — mobilization start
+  durationMonths Int? // ASSIGNMENT — e.g. 6 → PO Value = total × months
+  workingHours  String? // ASSIGNMENT — e.g. "10 hrs × 26 days"
+  hoursPerMonth Int? // MANPOWER basis — null = direct amounts, 260 = hourly manpower mode
+  supplierAddress String? // PARTIES — supplier address line
+  supplierVat   String? // PARTIES — supplier VAT number
+  supplierCr    String? // PARTIES — supplier C.R. number
   subtotal      Float     @default(0)
   vatRate       Float     @default(0.15)
   vatAmount     Float     @default(0)
   total         Float     @default(0)
-  notes         String?
+  notes         String? // TERMS — one condition per line, auto-numbered on print
   createdByName String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -560,4 +726,223 @@ model AgreementClause {
   body        String
 
   @@index([agreementId])
+}
+
+// ═══════════ E-INVOICE MODULE (bilingual ZATCA-style) ═══════════
+
+model EInvoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique // INV-2026-00001 | CRN-2026-00001 | DBN-2026-00001
+  docType       String   @default("invoice") // invoice | credit_note | debit_note
+  clientId      String?
+  client        Client?  @relation("EInvoiceClient", fields: [clientId], references: [id], onDelete: SetNull)
+  clientNameEn  String
+  clientNameAr  String   @default("")
+  clientVatNumber String?
+  clientCrNumber  String?
+  clientAddressEn String?
+  clientAddressAr String?
+  poRef         String?
+  contractRef   String?
+  projectEn     String?
+  projectAr     String?
+  paymentTermsEn String?
+  paymentTermsAr String?
+  paymentMethodEn String?
+  paymentMethodAr String?
+  issueDate     DateTime
+  supplyDate    DateTime?
+  dueDate       DateTime?
+  status        String   @default("draft") // draft | issued | partially_paid | paid  (overdue = derived)
+  subtotal      Float    @default(0)  // Σ qty × unitPrice
+  totalDiscount Float    @default(0)  // Σ line discounts
+  taxableAmount Float    @default(0)  // subtotal − discount
+  vatAmount     Float    @default(0)  // Σ per-line VAT
+  totalDue      Float    @default(0)  // taxable + VAT
+  paidAmount    Float    @default(0)  // Σ payments (recomputed from EInvoicePayment)
+  notesEn       String?
+  notesAr       String?
+  // JSON string array of header field keys the user manually edited in Arabic
+  // (e.g. ["project","paymentTerms"]) — auto-translate must not overwrite these
+  arManualFlags String   @default("[]")
+  showReceiverSignature Boolean @default(true) // per-invoice override of the config default
+  // ---- ZATCA phase designation (PER INVOICE — Phase 1 & Phase 2 are separate) ----
+  // 1 = Phase 1 (Generation): QR with TLV tags 1-5 only, no crypto, no portal
+  // 2 = Phase 2 (Integration): 8-tag cryptographic stamp + UBL + Fatoora submission
+  zatcaPhase    Int      @default(1)
+  // Phase 2 submission outcome (set by /zatca/report): reported | cleared | rejected
+  zatcaStatus        String?
+  zatcaResponse      String? // full gateway JSON (simulation or production)
+  zatcaSubmittedAt   DateTime?
+  zatcaSubmissionMode String? // simulation | production
+  signature    String?  // base64 ECDSA signature of the invoice hash (Phase 2 stamp)
+  // Credit/Debit note linkage — corrections reference the original invoice
+  relatedInvoiceId String?
+  relatedInvoice   EInvoice? @relation("NoteRef", fields: [relatedInvoiceId], references: [id], onDelete: SetNull)
+  relatedNotes     EInvoice[] @relation("NoteRef")
+  // ---- ZATCA Phase 2 readiness (assigned at Issue time) ----
+  uuid          String?  @unique // uuid v4
+  icv           Int?     // invoice counter (sequential across all issued e-invoices)
+  invoiceHash   String?  // base64 SHA-256 of the invoice UBL XML
+  previousHash  String?  // base64 hash of the previously issued e-invoice (PIH chain)
+  issuedAt      DateTime?
+  issuedByName  String?
+  // Scanned signed copy uploaded after issuing (proof of delivery) — does NOT unlock editing
+  signedCopyImage String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items    EInvoiceItem[]
+  payments EInvoicePayment[]
+
+  @@index([status])
+  @@index([issueDate])
+  @@index([clientId])
+  @@index([docType])
+}
+
+model EInvoiceItem {
+  id           String   @id @default(cuid())
+  eInvoiceId   String
+  eInvoice     EInvoice @relation(fields: [eInvoiceId], references: [id], onDelete: Cascade)
+  sr           Int      @default(1)
+  descriptionEn String
+  descriptionAr String  @default("")
+  descArManual  Boolean @default(false) // manual Arabic edit — skip auto-translate
+  unitEn       String?
+  unitAr       String?
+  unitArManual Boolean @default(false)
+  quantity     Float    @default(1)
+  unitPrice    Float    @default(0)
+  discount     Float    @default(0) // per-line discount amount
+  vatPercent   Float    @default(15) // 15 standard, 0 for exempt/zero-rated lines
+  taxableAmount Float  @default(0) // qty × price − discount
+  vatAmount    Float   @default(0) // taxable × vat%
+  lineTotal    Float   @default(0) // taxable + vat
+
+  @@index([eInvoiceId])
+}
+
+model EInvoicePayment {
+  id           String   @id @default(cuid())
+  eInvoiceId   String
+  eInvoice     EInvoice @relation(fields: [eInvoiceId], references: [id], onDelete: Cascade)
+  amount       Float
+  paymentDate  DateTime
+  methodEn     String?
+  methodAr     String?
+  reference    String?
+  notes        String?
+  createdByName String?
+  createdAt    DateTime @default(now())
+
+  @@index([eInvoiceId])
+}
+
+// ═══════════ AI ASSISTANT MODULE ═══════════
+// Conversational AI with read-only ERP tool calling. The AI never writes to
+// the database — drafts are returned as data the user reviews and saves
+// manually through the normal module screens.
+
+// A chat conversation (each user sees only their own chats)
+model AiChat {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("AiChatOwner", fields: [userId], references: [id], onDelete: Cascade)
+  title     String   @default("New chat")
+  // Last message preview for the history list (denormalized, capped length)
+  lastPreview String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AiChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+// One message inside a chat (user question or assistant answer)
+model AiChatMessage {
+  id        String   @id @default(cuid())
+  chatId    String
+  chat      AiChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      String // user | assistant
+  content   String // markdown answer / question text
+  // JSON array of tool events: [{name, args, ok, ms, rows, summary}]
+  toolEvents String  @default("[]")
+  // JSON array of attachments: [{name, type, size, extractedChars}]
+  attachments String @default("[]")
+  // JSON array of drafts extracted from the answer: [{type, title, data}]
+  drafts    String  @default("[]")
+  promptTokens     Int  @default(0)
+  completionTokens Int  @default(0)
+  isError   Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([chatId, createdAt])
+}
+
+// Single-row AI provider configuration. The API key is stored ENCRYPTED
+// (AES-256-GCM, key derived from a server-side secret) and is NEVER sent to
+// the browser — the settings API returns only a masked hint like "sk-…abc4".
+model AiSettings {
+  id                String   @id @default(cuid())
+  // builtin = sandbox GLM via z-ai-web-dev-sdk (no key needed)
+  // zhipu | anthropic | openai = direct HTTPS calls with the stored key
+  provider          String   @default("builtin")
+  model             String   @default("")
+  apiKeyEnc         String? // AES-256-GCM ciphertext (never leaves the server)
+  baseUrl           String? // optional custom endpoint override
+  maxTokens         Int      @default(4000) // max response length (completion cap)
+  monthlyLimitSar   Float    @default(0) // 0 = unlimited
+  // Cost estimate per 1,000 tokens (SAR) — drives the usage page estimate
+  inCostPer1k       Float    @default(0)
+  outCostPer1k      Float    @default(0)
+  updatedAt         DateTime @updatedAt
+}
+
+// Audit + usage row for EVERY assistant request
+model AiUsageLog {
+  id               String   @id @default(cuid())
+  userId           String?
+  userName         String?
+  chatId           String?
+  question         String // capped snippet of the user's question
+  // JSON array of tool names that were called
+  toolsCalled      String   @default("[]")
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  costSar          Float    @default(0)
+  durationMs       Int      @default(0)
+  provider         String   @default("builtin")
+  model            String   @default("")
+  success          Boolean  @default(true)
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+// Fixed translations that always win over machine translation
+model GlossaryTerm {
+  id        String   @id @default(cuid())
+  termEn    String   @unique
+  termAr    String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Reused translations (translation memory)
+model TranslationMemory {
+  id         String   @id @default(cuid())
+  sourceText String
+  translatedText String
+  fieldContext String? // client_name | address | description | unit | project | payment_terms | payment_method | notes | bank_name | generic
+  usageCount Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([sourceText, fieldContext])
 }

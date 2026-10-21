@@ -348,3 +348,48 @@ html {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- E-Invoice bilingual fonts (Cairo variable + Tajawal) ---------- */
+/* Cairo is a variable font (400–700); Arabic subsets carry the Arabic unicode
+   range so Latin text never loads the Arabic file. Used by the E-Invoice print
+   document and Arabic inputs in the e-invoice form. */
+@font-face { font-family: 'Cairo'; src: url('/fonts/cairo-arabic-400.woff2') format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; font-weight: 400 700; font-display: swap; }
+@font-face { font-family: 'Cairo'; src: url('/fonts/cairo-latin-400.woff2') format('woff2'); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: 'Tajawal'; src: url('/fonts/tajawal-arabic-400.woff2') format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Tajawal'; src: url('/fonts/tajawal-arabic-700.woff2') format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Tajawal'; src: url('/fonts/tajawal-latin-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Tajawal'; src: url('/fonts/tajawal-latin-700.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+
+/* Arabic input fields in the e-invoice form (RTL, Cairo) */
+.font-arabic {
+  font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif;
+}
+
+/* ---------- AI Assistant ---------- */
+/* Streaming caret shown while the answer reveals */
+.ai-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: var(--gold-deep);
+  animation: ai-caret-blink 0.85s steps(2, start) infinite;
+}
+@keyframes ai-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+/* Markdown answer typography */
+.ai-markdown {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.ai-markdown > :first-child { margin-top: 0; }
+.ai-markdown > :last-child { margin-bottom: 0; }
+.ai-markdown table { font-variant-numeric: tabular-nums; }
+.ai-markdown td, .ai-markdown th { max-width: 22rem; }

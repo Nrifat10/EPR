@@ -1,7 +1,8 @@
 // Quotation API — GET / PUT / DELETE a single quotation.
-// GET returns the full document (items sorted by sr + linked client details)
-// for the edit dialog and the A4 print preview. PUT replaces ALL items in a
-// transaction and recomputes every money figure server-side.
+// GET returns the full document (items sorted by sr, assets, linked client
+// details) for the edit dialog and the A4 print preview. PUT replaces ALL
+// items and assets in a transaction and recomputes every money figure
+// server-side.
 import { NextRequest } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
@@ -18,28 +19,23 @@ import {
   parseDate,
   logActivity,
 } from '@/lib/api-helpers'
-import { mapQuotation, quoteInclude } from '../mappers'
-
-const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired'] as const
-
-const itemSchema = z.object({
-  description: z.string().min(1, 'Item description is required').max(500, 'Item description is too long'),
-  unit: z.string().nullable().optional(),
-  quantity: z.coerce
-    .number()
-    .positive('Quantity must be greater than 0')
-    .max(1_000_000, 'Quantity is too large'),
-  unitPrice: z.coerce
-    .number()
-    .min(0, 'Unit price cannot be negative')
-    .max(1_000_000_000, 'Unit price is too large'),
-})
+import {
+  mapQuotation,
+  quoteInclude,
+  QUOTE_STATUSES,
+  itemSchema,
+  assetSchema,
+  normalizeAssets,
+  normalizeItems,
+  computeTotals,
+} from '../mappers'
 
 const quotationUpdateSchema = z.object({
   quoteNumber: z.string().min(1).max(40).optional(), // normally not edited (auto-generated)
   clientId: z.string().trim().nullable().optional(),
   clientName: z.string().min(1, 'Client name is required').max(160, 'Client name is too long'),
   subject: z.string().nullable().optional(),
+  referenceNo: z.string().max(80, 'Reference number is too long').nullable().optional(),
   issueDate: z.string().min(1, 'Issue date is required'),
   validityDate: z.string().nullable().optional(),
   status: z.enum(QUOTE_STATUSES),
@@ -55,7 +51,16 @@ const quotationUpdateSchema = z.object({
     .optional(),
   notes: z.string().nullable().optional(),
   terms: z.string().nullable().optional(),
+  // ---- quotation template fields (boss's design) ----
+  projectName: z.string().max(200, 'Project name is too long').nullable().optional(),
+  projectLocation: z.string().max(200, 'Project location is too long').nullable().optional(),
+  contractPeriod: z.string().max(60, 'Contract period text is too long').nullable().optional(),
+  contractMonths: z.coerce.number().int().min(0).max(600, 'Contract months cannot exceed 600').nullable().optional(),
+  mobilization: z.string().max(120, 'Mobilization text is too long').nullable().optional(),
+  inclusions: z.string().max(4000, 'Inclusions text is too long').nullable().optional(),
+  exclusions: z.string().max(4000, 'Exclusions text is too long').nullable().optional(),
   items: z.array(itemSchema).min(1, 'At least one line item is required').max(200, 'Too many line items'),
+  assets: z.array(assetSchema).max(4, 'Too many assets').optional(),
 })
 
 type Params = { params: Promise<{ id: string }> }
@@ -119,26 +124,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
     if (!clientName) return badRequest('Client name is required')
 
-    const items = body.items.map((it, i) => {
-      const quantity = round2(it.quantity)
-      const unitPrice = round2(it.unitPrice)
-      return {
-        sr: i + 1,
-        description: it.description.trim(),
-        unit: it.unit?.trim() || null,
-        quantity,
-        unitPrice,
-        lineTotal: round2(quantity * unitPrice),
-      }
-    })
+    const { items, error: itemError } = normalizeItems(body.items)
+    if (itemError || !items) return badRequest(itemError ?? 'Invalid line items')
+
+    const { assets, error: assetError } = normalizeAssets(body.assets ?? [])
+    if (assetError || !assets) return badRequest(assetError ?? 'Invalid signature/stamp assets')
+
     const discount = round2(body.discount ?? 0)
     const vatRate = body.vatRate ?? 0.15
-    const subtotal = round2(items.reduce((sum, it) => sum + it.lineTotal, 0))
+    const { subtotal, vatAmount, total } = computeTotals(items, discount, vatRate)
     if (discount > subtotal) {
       return badRequest('Discount cannot be greater than the subtotal')
     }
-    const vatAmount = round2((subtotal - discount) * vatRate)
-    const total = round2(subtotal - discount + vatAmount)
 
     // Optional manual quote-number override — uniqueness checked excluding self
     const quoteNumber = body.quoteNumber?.trim()
@@ -152,9 +149,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
       }
     }
 
-    // Full replace: items are deleted and recreated in the same transaction
+    // Full replace: items and assets are deleted and recreated in the same transaction
     const updated = await db.$transaction(async (tx) => {
       await tx.quotationItem.deleteMany({ where: { quotationId: id } })
+      await tx.quotationAsset.deleteMany({ where: { quotationId: id } })
       return tx.quotation.update({
         where: { id },
         data: {
@@ -162,6 +160,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           clientId,
           clientName,
           subject: body.subject?.trim() || null,
+          referenceNo: body.referenceNo?.trim() || null,
           issueDate,
           validityDate,
           status: body.status,
@@ -172,7 +171,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
           total,
           notes: body.notes?.trim() || null,
           terms: body.terms?.trim() || null,
+          projectName: body.projectName?.trim() || null,
+          projectLocation: body.projectLocation?.trim() || null,
+          contractPeriod: body.contractPeriod?.trim() || null,
+          contractMonths: body.contractMonths ?? null,
+          mobilization: body.mobilization?.trim() || null,
+          inclusions: body.inclusions?.trim() || null,
+          exclusions: body.exclusions?.trim() || null,
           items: { create: items },
+          assets: assets.length ? { create: assets } : undefined,
         },
         include: { ...quoteInclude, items: true },
       })
@@ -204,7 +211,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const existing = await db.quotation.findUnique({ where: { id } })
     if (!existing) return notFound('Quotation not found')
 
-    // Items cascade via FK onDelete: Cascade
+    // Items + assets cascade via FK onDelete: Cascade
     await db.quotation.delete({ where: { id } })
 
     await logActivity({

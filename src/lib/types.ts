@@ -77,12 +77,22 @@ export type ClientStatus = 'active' | 'inactive'
 export type ClientRow = {
   id: string
   name: string
+  /** Arabic company name — printed bilingually on ZATCA-style invoices */
+  nameAr: string | null
   contactPerson: string | null
   phone: string | null
   email: string | null
   address: string | null
+  /** Arabic address */
+  addressAr: string | null
   city: string | null
   crNumber: string | null
+  /** Saudi VAT registration number (15 digits) — required on B2B tax invoices */
+  vatNumber: string | null
+  bankName: string | null
+  iban: string | null
+  accountNumber: string | null
+  swiftCode: string | null
   status: ClientStatus
   notes: string | null
   createdAt: string
@@ -312,6 +322,12 @@ export type StaffRow = {
   status: StaffStatus
   staffCategory: { id: string; name: string } | null
   projects: { id: string; name: string }[]
+  // ---- Name List additions ----
+  passportNo: string | null
+  nationality: string | null
+  bloodGroup: string | null
+  experienceYears: number | null
+  deploymentStatus: string
 }
 
 export type AttendanceRow = {
@@ -534,7 +550,10 @@ export type ExpenseStatement = {
 
 export type AppSettings = {
   companyName: string
+  /** Arabic company name — printed bilingually on ZATCA-style invoices */
+  companyNameAr: string
   address: string
+  addressAr: string
   phone: string
   email: string
   logo: string | null
@@ -542,6 +561,20 @@ export type AppSettings = {
   defaultPayType: PayType
   authorizedSignatory: string
   signatoryTitle: string
+  /** Seller VAT registration number — QR tag 2 / UBL PartyTaxScheme CompanyID */
+  vatNumber: string
+  /** Seller commercial registration (CR) number — UBL PartyIdentification */
+  crNumber: string
+  /** Company bank details printed as payment instructions on invoices */
+  bankName: string
+  bankIban: string
+  bankAccountNumber: string
+  /** Account holder name shown on payment instructions */
+  bankAccountName: string
+  /** SWIFT/BIC code for international transfers */
+  bankSwiftCode: string
+  /** Bank branch address */
+  bankAddress: string
   /** VAT rate in PERCENT for the VAT Return Expense module (15 = 15% Saudi standard) */
   vatRate: number
 }
@@ -781,7 +814,7 @@ export type ViewKey =
   | 'transaction-categories'
   | 'vat-return-expense'
   | 'quotations'
-  | 'invoices'
+  | 'e-invoices'
   | 'name-list'
   | 'supplier-pos'
   | 'agreements'
@@ -789,7 +822,144 @@ export type ViewKey =
   | 'users'
   | 'settings'
   | 'activity-log'
+  | 'ai-assistant'
 
+// ── AI Assistant ──
+
+export type AiChatSummary = {
+  id: string
+  title: string
+  lastPreview: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AiToolEvent = {
+  name: string
+  args: Record<string, unknown>
+  ok: boolean
+  ms?: number
+  rows?: number
+  summary?: string
+  error?: string
+}
+
+export type AiAttachmentMeta = {
+  name: string
+  type: string
+  size: number
+  extractedChars?: number
+}
+
+export type AiDraft = {
+  type: 'quotation' | 'invoice' | 'po' | 'email' | 'letter'
+  title: string
+  data: Record<string, unknown>
+}
+
+export type AiMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  toolEvents: AiToolEvent[]
+  attachments: AiAttachmentMeta[]
+  drafts: AiDraft[]
+  promptTokens: number
+  completionTokens: number
+  isError: boolean
+  createdAt: string
+  /** client-only streaming state */
+  streaming?: boolean
+}
+
+export type AiSettingsView = {
+  provider: 'builtin' | 'zhipu' | 'anthropic' | 'openai'
+  model: string
+  apiKeyHint: string | null
+  hasKey: boolean
+  baseUrl: string
+  maxTokens: number
+  monthlyLimitSar: number
+  inCostPer1k: number
+  outCostPer1k: number
+  updatedAt: string
+}
+
+export type AiUsageView = {
+  month: {
+    label: string
+    requests: number
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    costSar: number
+  }
+  perUser: {
+    userName: string
+    requests: number
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    costSar: number
+  }[]
+  trend: { label: string; tokens: number; costSar: number }[]
+  sixMonthCost: number
+}
+
+export type AiLogRow = {
+  id: string
+  userName: string | null
+  question: string
+  toolsCalled: string
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  costSar: number
+  durationMs: number
+  provider: string
+  model: string
+  success: boolean
+  error: string | null
+  createdAt: string
+}
+
+export const AI_DRAFT_ICONS: Record<AiDraft['type'], string> = {
+  quotation: 'quotation',
+  invoice: 'invoice',
+  po: 'po',
+  email: 'email',
+  letter: 'letter',
+}
+
+export const VIEW_LABELS: Partial<Record<ViewKey, string>> = {
+  dashboard: 'Dashboard',
+  projects: 'Project Management',
+  clients: 'Clients',
+  deployments: 'Worker Deployment',
+  'staff-list': 'Staff List',
+  'staff-categories': 'Staff Categories',
+  attendance: 'Staff Attendance',
+  payroll: 'Payroll',
+  advances: 'Worker Advances',
+  'salary-sheet': 'Salary Sheet',
+  'salary-summary': 'Staff Salary Summary',
+  'client-salary-summary': 'Client Salary Summary',
+  'income-list': 'Income List',
+  'expense-list': 'Expense List',
+  'accounts-summary': 'Accounts Summary',
+  'transaction-categories': 'Categories',
+  'vat-return-expense': 'VAT Return Expense',
+  quotations: 'Quotations',
+  'e-invoices': 'E-Invoice',
+  'name-list': 'Name List',
+  'supplier-pos': 'Supplier P.O.',
+  agreements: 'Agreements',
+  roles: 'Roles',
+  users: 'Users',
+  settings: 'Settings',
+  'activity-log': 'Activity Log',
+  'ai-assistant': 'AI Assistant',
+}
 export const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -801,9 +971,9 @@ export const PAY_TYPE_LABELS: Record<PayType, string> = {
   cheque: 'Cheque',
 }
 
-// ── Business Documents (Quotations, Invoices, Name List, Supplier P.O., Agreements) ──
+// ── Business Documents (Quotations, E-Invoices, Name List, Supplier P.O., Agreements) ──
 
-/** Shared line-item shape used by quotations, invoices, supplier POs and agreements */
+/** Shared line-item shape used by quotations, supplier POs and agreements */
 export type DocItemRow = {
   id?: string
   sr: number
@@ -811,7 +981,38 @@ export type DocItemRow = {
   unit: string | null
   quantity: number
   unitPrice: number
+  /** Optional per-line discount amount (quotations). */
+  discount?: number
   lineTotal: number
+  /** Quotation template: gray detail line under the description. */
+  subText?: string | null
+  /** Quotation template: SAR/hour basis (Rate / Hour column). */
+  ratePerHour?: number | null
+  /** Quotation template: hours/month basis (Hours / Month column). */
+  hoursPerMonth?: number | null
+}
+
+/** Signature / stamp image placed on a quotation (percent-of-A4 coordinates). */
+export type QuotationAssetRow = {
+  id?: string
+  type: 'signature' | 'stamp'
+  dataUrl: string
+  posX: number // % of page width (left edge)
+  posY: number // % of page height (top edge)
+  width: number // % of page width
+  rotation: number // degrees clockwise
+  visible: boolean
+}
+
+/** Company letterhead configuration (single row, GET /api/letterhead). */
+export type LetterheadConfig = {
+  mode: 'none' | 'header' | 'header_footer' | 'full'
+  headerImage: string | null
+  footerImage: string | null
+  fullPageImage: string | null
+  showCompanyDetails: boolean
+  headerHeightMm: number
+  footerHeightMm: number
 }
 
 export type QuotationRow = {
@@ -820,6 +1021,7 @@ export type QuotationRow = {
   clientId: string | null
   clientName: string
   subject: string | null
+  referenceNo: string | null
   issueDate: string
   validityDate: string | null
   status: string
@@ -830,32 +1032,25 @@ export type QuotationRow = {
   total: number
   notes: string | null
   terms: string | null
+  /** Quotation template: PROJECT DETAILS box. */
+  projectName: string | null
+  projectLocation: string | null
+  contractPeriod: string | null
+  /** Numeric months — drives the Contract Value row (total × months). */
+  contractMonths: number | null
+  mobilization: string | null
+  /** Newline-separated bullet lists (INCLUDED / EXCLUDED boxes). */
+  inclusions: string | null
+  exclusions: string | null
   createdByName: string | null
   createdAt: string
   items?: DocItemRow[]
+  assets?: QuotationAssetRow[]
 }
 
-export type InvoiceRow = {
-  id: string
-  invoiceNumber: string
-  clientId: string | null
-  clientName: string
-  subject: string | null
-  issueDate: string
-  dueDate: string | null
-  status: string
-  subtotal: number
-  vatRate: number
-  vatAmount: number
-  total: number
-  paidAmount: number
-  notes: string | null
-  createdByName: string | null
-  createdAt: string
-  items?: DocItemRow[]
-}
-
-export type NameListRow = {
+/** Company/person directory entry (the "Directory" tab of the Name List
+ *  module) — maps the NameListEntry table. */
+export type NameListEntryRow = {
   id: string
   name: string
   type: string
@@ -871,15 +1066,44 @@ export type NameListRow = {
   createdAt: string
 }
 
+/** Saved supplier directory row (GET /api/suppliers) — picked from a dropdown
+ *  when creating Supplier P.O.s so details auto-fill and persist. */
+export type SupplierRow = {
+  id: string
+  name: string
+  contactPerson: string | null
+  phone: string | null
+  email: string | null
+  address: string | null
+  vatNumber: string | null
+  crNumber: string | null
+  status: string // active | inactive
+  notes: string | null
+  createdByName: string | null
+  createdAt: string
+  poCount: number
+}
+
 export type SupplierPoRow = {
   id: string
   poNumber: string
+  supplierId: string | null
   supplierName: string
   supplierPhone: string | null
   attention: string | null
   issueDate: string
   expectedDate: string | null
   status: string
+  quotationRef: string | null
+  paymentTerms: string | null
+  workSite: string | null
+  startDate: string | null
+  durationMonths: number | null
+  workingHours: string | null
+  hoursPerMonth: number | null
+  supplierAddress: string | null
+  supplierVat: string | null
+  supplierCr: string | null
   subtotal: number
   vatRate: number
   vatAmount: number
@@ -929,8 +1153,221 @@ export type AgreementRow = {
 }
 
 export const QUOTATION_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired'] as const
-export const INVOICE_STATUSES = ['draft', 'issued', 'paid', 'cancelled'] as const
 export const SUPPLIER_PO_STATUSES = ['draft', 'ordered', 'received', 'cancelled'] as const
 export const AGREEMENT_STATUSES = ['draft', 'final', 'signed', 'expired'] as const
 export const AGREEMENT_TYPES = ['labor_supply', 'service', 'subcontract'] as const
 export const NAME_LIST_TYPES = ['client', 'supplier', 'subcontractor', 'other'] as const
+
+// ═══════════ E-INVOICE MODULE (bilingual ZATCA-style) ═══════════
+export const EINVOICE_DOC_TYPES = ['invoice', 'credit_note', 'debit_note'] as const
+export const EINVOICE_STATUSES = ['draft', 'issued', 'partially_paid', 'paid'] as const
+// Derived status — not stored: dueDate < today AND status IN (issued, partially_paid) AND paid < total
+export const EINVOICE_FILTER_STATUSES = ['draft', 'issued', 'partially_paid', 'paid', 'overdue'] as const
+
+export type EInvoiceItemRow = {
+  id: string
+  sr: number
+  descriptionEn: string
+  descriptionAr: string
+  descArManual: boolean
+  unitEn: string | null
+  unitAr: string | null
+  unitArManual: boolean
+  quantity: number
+  unitPrice: number
+  discount: number
+  vatPercent: number
+  taxableAmount: number
+  vatAmount: number
+  lineTotal: number
+}
+export type EInvoicePaymentRow = {
+  id: string
+  amount: number
+  paymentDate: string
+  methodEn: string | null
+  methodAr: string | null
+  reference: string | null
+  notes: string | null
+  createdByName: string | null
+  createdAt: string
+}
+export type EInvoiceRow = {
+  id: string
+  invoiceNumber: string
+  docType: string
+  clientId: string | null
+  clientNameEn: string
+  clientNameAr: string
+  clientVatNumber: string | null
+  clientCrNumber: string | null
+  clientAddressEn: string | null
+  clientAddressAr: string | null
+  poRef: string | null
+  contractRef: string | null
+  projectEn: string | null
+  projectAr: string | null
+  paymentTermsEn: string | null
+  paymentTermsAr: string | null
+  paymentMethodEn: string | null
+  paymentMethodAr: string | null
+  issueDate: string
+  supplyDate: string | null
+  dueDate: string | null
+  status: string
+  subtotal: number
+  totalDiscount: number
+  taxableAmount: number
+  vatAmount: number
+  totalDue: number
+  paidAmount: number
+  notesEn: string | null
+  notesAr: string | null
+  arManualFlags: string[] // header field keys manually edited in Arabic (auto-translate must not overwrite)
+  showReceiverSignature: boolean
+  // ZATCA phase designation (per invoice): 1 = Generation, 2 = Integration
+  zatcaPhase: number
+  zatcaStatus: string | null // reported | cleared | rejected (Phase 2 submission outcome)
+  zatcaSubmittedAt: string | null
+  zatcaSubmissionMode: string | null // simulation | production
+  relatedInvoiceId: string | null
+  uuid: string | null
+  icv: number | null
+  invoiceHash: string | null
+  previousHash: string | null
+  issuedAt: string | null
+  issuedByName: string | null
+  signedCopyImage: string | null
+  createdAt: string
+  updatedAt: string
+  // derived
+  overdue: boolean
+  clientName?: string // = clientNameEn (list display convenience)
+  itemCount?: number
+  items?: EInvoiceItemRow[]
+  payments?: EInvoicePaymentRow[]
+  relatedInvoiceNumber?: string | null
+}
+export type EInvoiceConfig = {
+  letterhead: string
+  topMm: number
+  bottomMm: number
+  signature: string
+  stamp: string
+  showReceiverSignature: boolean
+  translateProvider: string
+  translateApiKeySet: boolean
+}
+export type GlossaryTermRow = {
+  id: string
+  termEn: string
+  termAr: string
+  notes: string | null
+  createdAt: string
+}
+
+// ── Name List module (worker deployment lists) ─────────────────────────────
+export type NameListSubjectKind = 'interview' | 'mobilization'
+export type NameListWorkerResult = 'selected' | 'rejected' | 'absent' | 'onhold'
+export type NameListStatus = 'draft' | 'sent' | 'completed' | 'cancelled'
+
+export type NameListSubjectRow = {
+  id: string
+  name: string
+  color: string
+  kind: NameListSubjectKind
+  sortOrder: number
+  isSystem: boolean
+}
+
+/** Worker row inside a list, with the staff fields the printouts need. */
+export type NameListWorkerRow = {
+  id: string
+  staffId: string
+  sortOrder: number
+  result: NameListWorkerResult | null
+  remarks: string | null
+  staff: {
+    id: string
+    fullName: string
+    phone: string | null
+    position: string | null
+    iqamaId: string
+    iqamaExpiry: string | null
+    passportNo: string | null
+    nationality: string | null
+    bloodGroup: string | null
+    experienceYears: number | null
+    deploymentStatus: string
+    status: string
+    categoryName: string | null
+  }
+}
+
+/** Summary row (list index, today board, client tab). */
+export type NameListRow = {
+  id: string
+  listNo: string
+  date: string
+  time: string | null
+  clientId: string
+  clientName: string
+  location: string | null
+  projectId: string | null
+  projectName: string | null
+  subjectId: string
+  subjectName: string
+  subjectColor: string
+  subjectKind: NameListSubjectKind
+  positions: string[]
+  clientContact: string | null
+  clientPhone: string | null
+  transport: string | null
+  refInterviewListId: string | null
+  refInterviewListNo: string | null
+  refPoNo: string | null
+  notes: string | null
+  status: NameListStatus
+  workerCount: number
+  resultCounts: { selected: number; rejected: number; absent: number; onhold: number; pending: number }
+  signedCopyName: string | null
+  createdByName: string | null
+  createdAt: string
+}
+
+/** Full list for the editor / print (GET /api/name-lists/[id]). */
+export type NameListDetail = NameListRow & {
+  client: {
+    id: string
+    name: string
+    contactPerson: string | null
+    phone: string | null
+    city: string | null
+  } | null
+  workers: NameListWorkerRow[]
+  columns: NameListColumns | null
+}
+
+/** Visible-column toggles (# and Employee Name are always shown). */
+export type NameListColumnKey =
+  | 'trade'
+  | 'experience'
+  | 'nationality'
+  | 'iqama'
+  | 'passport'
+  | 'mobile'
+  | 'blood'
+  | 'iqamaExpiry'
+  | 'employeeId'
+  | 'result'
+  | 'remarks'
+
+export type NameListColumns = Partial<Record<NameListColumnKey, boolean>>
+
+/** Per-user warning returned when adding a worker (never a hard block). */
+export type NameListWorkerWarning = {
+  staffId: string
+  staffName: string
+  type: 'conflict' | 'deployed' | 'missing'
+  message: string
+}

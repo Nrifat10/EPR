@@ -1499,3 +1499,34 @@ Stage Summary:
 - Login page now shows the 4 accounts expanded by default with one-click sign-in (arrow icon per row; Owner highlighted gold with "You" badge).
 - Owner entry: click "Sign in directly as Owner · Super Admin" (or row → Sign in) with admin@landmarkintergulf.com / Landmark@2025.
 - If the user ever reports "empty app" again: check /api/bootstrap (needsBootstrap=false), confirm DB counts, and remind them to sign in — data lives server-side and survives restarts.
+
+---
+Task ID: R12
+Agent: main (Z.ai Code)
+Task: User provided GitHub repo (landmarkfinace/finial — "v15") and asked to update this project from it: "check github and project, these were done in v15, update this project from this repo".
+
+Work Log:
+- Cloned https://github.com/landmarkfinace/finial.git to /tmp/finial-repo (single commit "Sync current work before moving repo").
+- Full comparison with our project: same tech stack, same lineage (auth/login routes + lib/auth.ts byte-identical). Repo is a SUPERSET with major features our sandbox lacked.
+- Features found only in repo and MERGED IN:
+  * AI Assistant (views/ai-assistant.tsx, api/ai/*, lib/ai/*, AiChat/AiChatMessage/AiSettings/AiUsageLog models) — chat with live read-only ERP tools, EN/AR/BN, voice input, file attach, chat history, PDF export.
+  * ZATCA E-Invoice system (views/e-invoices.tsx, e-invoice-zatca-submit.tsx, zatca-shared.tsx, print/e-invoice-print.tsx, api/e-invoices + e-invoice-config + zatca, lib/e-invoice.ts + zatca.ts + amount-words.ts + arabic-words.ts, EInvoice/EInvoiceItem/EInvoicePayment models) — bilingual AR/EN invoices, QR, PIH hash chain, ECDSA stamps, payments, ZATCA submit/clearance simulation. Replaced our simple Invoice module (old Invoice/InvoiceItem tables dropped via db push).
+  * New Name List system (views/name-list/ folder, api/name-lists + name-list-subjects, lib/name-list-server.ts + name-list-utils.ts, NameList/NameListWorker/NameListSubject models, print/name-list-sheet-print.tsx) — Lists/Today/Reports/Directory tabs, 5 system subjects with badge colours, staff bio-data (nationality, passport, blood group, experience, deploymentStatus).
+  * Suppliers directory (api/suppliers, Supplier model, prisma/seed-suppliers.ts — 3 Saudi manpower suppliers).
+  * Letterhead + DefaultTerms (api/letterhead, api/default-terms, CompanyLetterhead + DefaultTerms + QuotationAsset models) + quotations/[id]/duplicate, quotations/[id]/excel, quotations/next-number.
+  * Glossary/Translation memory (api/glossary, GlossaryTerm + TranslationMemory models, lib/translate.ts) for the AI translation workflow.
+  * Newer versions of: clients/projects/staff/quotations/supplier-pos/settings APIs, sidebar, app.tsx, command-palette, print templates, store (Arabic company fields, VAT/CR number, bank details), permissions, seed-data.
+- KEPT FROM OURS: login-screen.tsx (our 815-line version is a strict superset — repo's 629-line base + our DEMO_ACCOUNTS panel, one-click quickSignIn, default-open panel). Verified via diff.
+- Merge steps: tar backup of whole project (pre-merge-backup-20261021-1150.tar.gz) + db/custom.db copy to /tmp; installed pdf-parse@1.1.1, remark-gfm@4.0.1, xlsx@0.18.5 (only missing deps); replaced src/ wholesale (kept our login-screen); copied prisma/schema.prisma (42 models) + seed.ts + seed-suppliers.ts, scripts/* (11 demo/utility scripts), public/* (fonts, logo variants), README.md, ecosystem.config.cjs, .env.example; bun run db:generate + db:push (dropped only Invoice/InvoiceItem — 5+11 rows, replaced by EInvoice; all other data preserved).
+- Dev server was OOM-killed during the massive recompile — restarted with double-fork pattern; HTTP 200 after boot.
+- Ran repo seeders: name-list-seed (5 subjects, 39 staff backfilled + deploymentStatus), ai-demo-seed (guard flag; +14 workers, 3 projects, 169 attendance, 14 payrolls, advances, VAT bills, expenses), add-clients (9 clients + role permissions), add-signatory, backfill-expiry (54 staff: 6 expired, 7 soon), backfill-expense-month (48 txns), q-demo-seed (QTN-2026-0006 boss template — 279,500/41,925/321,425 verified), po-demo-seed (Riyadh Skilled Manpower PO — 151,060/22,659/173,719/1,042,314 verified), ei-demo-seed (4 bilingual e-invoices: draft/issued/partially-paid/overdue/ZATCA-cleared via REAL API), seed-suppliers (3 suppliers).
+- QA: bun run lint → 0 problems. dev.log clean (no 5xx, no errors). agent-browser E2E: one-click owner login → Dashboard (7 KPIs, Document Compliance live) → AI Assistant ("Iqama expiring in 30 days" → tool call iqama_expiring, 3 rows, correct table with masked Iqamas) → E-Invoice module (SAR 382,100 invoiced, bilingual rows, Preview verified via VLM: bilingual AR/EN, letterhead bands, VAT 15% table, navy/gold professional) → Name List (4 tabs, Directory with clients 3/suppliers 4/subcontractors 3) → Quotations (6 total incl. boss template) → logout → login page demo panel intact → one-click re-login OK.
+- VLM dashboard audit: all stat cards populated, no broken layout, enterprise-professional.
+
+Stage Summary:
+- The project is now FULLY synced with the v15 GitHub repo (finial) PLUS our newer login improvements (default-open credentials panel, one-click sign-in).
+- 42 Prisma models; key new modules: AI Assistant (z-ai-web-dev-sdk backend), ZATCA E-Invoice, Name List system, Suppliers, Letterhead/DefaultTerms, Glossary.
+- DB counts after merge: 54 staff, 10 clients, 6 quotations, 4 e-invoices, 3 suppliers, 5 POs, 3 agreements, 46 payrolls, 75 transactions, 4 users, 5 name-list subjects, 1 AI chat.
+- Login unchanged: admin@landmarkintergulf.com / Landmark@2025 (plus 3 demo accounts) — one-click from the login page.
+- Note: AI demo seed added 14 workers on top of our 40 (by design — richer demo data).
+- If user reports anything missing again: the repo merge is complete; compare against /tmp/finial-repo (delete after 2026-10-28) or re-clone.
