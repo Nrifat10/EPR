@@ -20,9 +20,12 @@ node_modules
 # production
 /build
 
-# database (SQLite)
-db/*.db
+# database (SQLite) — custom.db IS committed (full data backup with the project)
+# transient SQLite side files stay ignored
 db/*.db-journal
+db/*.db-shm
+db/*.db-wal
+db/*.db.bak
 
 # logs
 *.log
