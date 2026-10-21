@@ -11,7 +11,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   AlertTriangle,
+  Calculator,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  Copy,
+  Crown,
+  Eye,
+  KeyRound,
   Loader2,
   Lock,
   LogIn,
@@ -19,6 +26,7 @@ import {
   MapPin,
   ShieldCheck,
   User,
+  Users,
 } from 'lucide-react'
 import { api, setAuthToken } from '@/lib/api-client'
 import { useAppStore } from '@/lib/store'
@@ -26,6 +34,42 @@ import type { SessionUser } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const REMEMBER_KEY = 'lig:remembered-email'
+
+/** Demo access accounts — roles seeded with the system (click a row to fill the form). */
+const DEMO_ACCOUNTS = [
+  {
+    role: 'Owner · Super Admin',
+    email: 'admin@landmarkintergulf.com',
+    password: 'Landmark@2025',
+    icon: Crown,
+    highlight: true,
+    desc: 'Full access to every module and setting',
+  },
+  {
+    role: 'Accountant',
+    email: 'accountant@example.com',
+    password: 'Accountant@2025',
+    icon: Calculator,
+    highlight: false,
+    desc: 'Accounts, payroll and financial reports',
+  },
+  {
+    role: 'HR Manager',
+    email: 'hr@example.com',
+    password: 'HrManager@2025',
+    icon: Users,
+    highlight: false,
+    desc: 'Staff records, attendance and deployment',
+  },
+  {
+    role: 'Viewer',
+    email: 'viewer@example.com',
+    password: 'Viewer@2025',
+    icon: Eye,
+    highlight: false,
+    desc: 'Read-only dashboards and reports',
+  },
+] as const
 
 type BootstrapState =
   | { status: 'checking' }
@@ -113,6 +157,8 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null)
   const [errorShake, setErrorShake] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [showAccounts, setShowAccounts] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [bootstrap, setBootstrap] = useState<BootstrapState>({ status: 'checking' })
 
   // First-run setup form state (shown only while the database has no users)
@@ -155,6 +201,27 @@ export function LoginScreen() {
 
   function trackCapsLock(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.getModifierState) setCapsLockOn(e.getModifierState('CapsLock'))
+  }
+
+  /** Copy an account's email + password as "email / password" to the clipboard. */
+  async function copyAccount(key: string, email: string, password: string) {
+    try {
+      await navigator.clipboard.writeText(`${email} / ${password}`)
+      setCopiedKey(key)
+      window.setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1600)
+    } catch {
+      toast.error('Copy failed', { description: 'Please select the text and copy manually.' })
+    }
+  }
+
+  /** Fill the sign-in form with a demo account's credentials. */
+  function fillAccount(account: (typeof DEMO_ACCOUNTS)[number]) {
+    setEmail(account.email)
+    setPassword(account.password)
+    setError(null)
+    toast.success(`${account.role} credentials filled`, {
+      description: 'Press “Sign in” to continue.',
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -344,6 +411,97 @@ export function LoginScreen() {
             )}
             Sign in
           </Button>
+
+          {/* Demo access accounts — click a row to fill the form */}
+          <div className="rounded-xl border bg-muted/40">
+            <button
+              type="button"
+              onClick={() => setShowAccounts((v) => !v)}
+              aria-expanded={showAccounts}
+              aria-controls="demo-accounts"
+              className="flex w-full items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <KeyRound className="h-3.5 w-3.5 text-[#8B6F1F] dark:text-[#D4AF37]/90" aria-hidden />
+              Demo access accounts
+              <ChevronDown
+                className={cn('h-3.5 w-3.5 transition-transform duration-200', showAccounts && 'rotate-180')}
+                aria-hidden
+              />
+            </button>
+            {showAccounts ? (
+              <div id="demo-accounts" className="space-y-1.5 border-t p-2">
+                {DEMO_ACCOUNTS.map((account) => {
+                  const Icon = account.icon
+                  const key = `${account.email}`
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        'group relative flex items-start gap-2.5 rounded-lg border p-2.5 transition-all',
+                        account.highlight
+                          ? 'border-[#D4AF37]/50 bg-gradient-to-r from-[#D4AF37]/[0.08] to-transparent'
+                          : 'border-transparent bg-background/60 hover:border-border hover:bg-background'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+                          account.highlight
+                            ? 'bg-[#D4AF37]/15 text-[#8B6F1F] ring-1 ring-[#D4AF37]/40 dark:text-[#D4AF37]'
+                            : 'bg-muted text-muted-foreground'
+                        )}
+                        aria-hidden
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => fillAccount(account)}
+                        className="min-w-0 flex-1 text-left"
+                        title={`${account.desc} — click to fill the sign-in form`}
+                      >
+                        <p
+                          className={cn(
+                            'flex items-center gap-1.5 text-xs font-semibold leading-tight',
+                            account.highlight ? 'text-foreground' : 'text-foreground/90'
+                          )}
+                        >
+                          {account.role}
+                          {account.highlight ? (
+                            <span className="rounded-full bg-[#D4AF37]/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-[#8B6F1F] ring-1 ring-[#D4AF37]/40 dark:text-[#D4AF37]">
+                              You
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="mt-1 truncate font-mono text-[11px] leading-tight text-muted-foreground">
+                          {account.email}
+                        </p>
+                        <p className="mt-0.5 font-mono text-[11px] leading-tight text-muted-foreground/80">
+                          ••••• {account.password}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyAccount(key, account.email, account.password)}
+                        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-all hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-focus md:opacity-0 md:group-hover:opacity-100"
+                        aria-label={`Copy ${account.role} credentials`}
+                        title="Copy email and password"
+                      >
+                        {copiedKey === key ? (
+                          <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  )
+                })}
+                <p className="px-1 pt-0.5 pb-0.5 text-center text-[10px] leading-relaxed text-muted-foreground/70">
+                  Click any account to auto-fill — demo data, safe to explore
+                </p>
+              </div>
+            ) : null}
+          </div>
 
           <div className="flex items-center justify-center gap-1.5 border-t pt-3 text-[11px] leading-snug text-muted-foreground/75">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#8B6F1F] dark:text-[#D4AF37]/80" aria-hidden />
