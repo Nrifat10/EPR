@@ -69,3 +69,6 @@ download/
 
 # sandbox gateway config (environment-specific, not part of the app)
 Caddyfile
+
+# sibling repo clones (managed separately)
+EPR/
