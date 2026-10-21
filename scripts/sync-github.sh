@@ -27,11 +27,10 @@ fi
 git add -A
 
 if git diff --cached --quiet; then
-  echo "✓ Nothing to sync — working tree clean."
-  exit 0
+  echo "• Nothing new to commit — pushing any un-pushed commits…"
+else
+  git commit -m "$MSG"
 fi
-
-git commit -m "$MSG"
 
 FAIL=0
 
