@@ -1447,3 +1447,33 @@ Stage Summary:
 - Login screen now shows a demo-accounts helper (expand, click row to auto-fill, copy button) — demo-friendly, gold/navy themed.
 - scripts/create-login.ts is rerunnable after any reseed to re-apply the professional passwords.
 - NOTE for future agents: if `bun run db:seed` is ever re-run, it RESETS users to admin@example.com/password — re-run `bun scripts/create-login.ts` afterwards to restore the owner login.
+
+---
+Task ID: R11 (restore-business-docs)
+Agent: main (Z.ai Code)
+Task: User report (Banglish): "version v15 ta za za chilo ekhon dakhi kicu nai? sob fix koro" — after the R10 re-seed, ALL business-document modules were EMPTY (the base `bun run db:seed` only restores core data; quotations/invoices/supplier POs/agreements/name lists/VAT bills/advances had been wiped along with project client rates).
+
+Work Log:
+- Diagnosed: DB counts showed quotation/invoice/supplierPo/agreement/nameListEntry/vatExpenseBill/workerAdvance ALL = 0 and project.clientRatePerHour = 0 on all 6 projects (core tables were fine: 40 staff, 32 Sept-2026 payrolls, 6 clients). App + login itself worked — the "missing v15 features" were the Business Documents section.
+- Wrote `scripts/restore-demo-docs.ts` (kept in repo, IDEMPOTENT — safe to re-run):
+  * Project client rates: Aramco/SABIC 65, Riyadh Metro/Jazan/NEOM 60, Yanbu 58.
+  * Quotations 5 (QTN-2026-0001..0005, statuses accepted/sent/accepted/rejected/draft, linked to real clients, server-style totals subtotal/VAT/total).
+  * Invoices 5 (INV-2026-0001..0005, paid with paidAmount / issued / draft, Aug-Oct 2026).
+  * Supplier POs 4 (PO-2026-0001..0004, received/ordered/ordered/cancelled, Jubail/Dammam/Riyadh suppliers).
+  * Agreements 3 (AGR-2026-0001 signed detailed w/ items+installments+6 clauses; 0002 final simple w/ installments; 0003 draft subcontract w/ items+installments+2 clauses).
+  * Name List 12 (4 suppliers, 3 subcontractors, 3 clients, 2 others with CR/VAT numbers).
+  * VAT expense bills 12 (9 in Q3 Jul-Sep + 3 in Q4 Oct 2026, computed amountWithoutVat/vatAmount breakdown, vatRateSnapshot 0.15).
+  * Worker advances 5 with FULL accounting consistency: created "Advance to Workers" (expense) + "Advance Recovery" (income) categories; every advance has a linked expense tx; 3 land on Sept PAID payrolls (Anil Menon 2000 single-installment deducted; Rajesh Nair 1200 & Nasir Mehmood 1000 two-installment partial) with PayrollAdvanceDeduction rows + Advance Recovery income txs + payroll advance/totalDeductions/netPay updates + linked Salary expense tx amount sync; 2 pending (Muhammad Rafiq 1500 from Oct, Mohammed Ashraf 800 from Nov).
+  * Reversal step on every re-run: undoes prior deduction rows' effect on payrolls before re-applying (never double-applies); activity-log section wipes its own module rows (fixed duplicate entries from multi-run).
+- Fixed during dev: NaN deductedAmount when omitted (default 0); stale-payroll false flags from "old fully-deducted advance without historical payroll rows" → redesigned so ALL deductions land on existing Sept paid payrolls; targets chosen with legacy advance = 0 (Ashraf/Joseph/etc. had seeded legacy advance values — avoided to keep stored == expected).
+
+QA (agent-browser + curl, all green):
+- Login → Quotations (5 rows, SAR 207,115 accepted value), Invoices (5, statuses), Supplier P.O. (4), Agreements (3), Name List (12 rows), VAT Return Expense (Q3 9 bills SAR 10,557 VAT / Q4-NOW 3 bills), Worker Advances (5 rows: pending/partial/deducted, summary cards 3,400 outstanding / 6,500 given / 3,100 deducted), Client Salary Summary Sept 2026 (6,310 h + 529 OT, billed 430,133 + VAT = 494,652.95 grand; only 1 unlinked payroll falls back to worker rate — realistic).
+- Advance receipt print dialog verified (branded, amount in words, recovery schedule).
+- API consistency: /api/advances/stale-payrolls?month=9&year=2026 → [] (clean); payroll net == linked salary tx amount for all 3 affected (21,650 / 19,125 / 13,863); recovery txs match deduction rows; advances summary {given 6500, deducted 3100, outstanding 3400}.
+- No browser console errors; lint 0 errors; dev.log all 200s; fresh login via demo panel E2E OK.
+
+Stage Summary:
+- v15 feature set fully restored on top of the re-seeded core data: all Business Documents modules populated with realistic Saudi manpower-company demo data, project client rates back (Client Salary Summary works without the mass fallback warning), advances module has live pending/partial/deducted examples with correct accounting.
+- `scripts/restore-demo-docs.ts` is the canonical doc-data restore: run `bun run db:seed` FIRST (core), THEN `bun scripts/create-login.ts` (owner login), THEN `bun scripts/restore-demo-docs.ts` (documents + rates + advances). Order matters.
+- Gotchas for future agents: (1) never seed "old fully-deducted" advances without historical payroll rows — expectedAdvanceForPayroll simulates from deduction rows, not stored balances → false stale flags; (2) pick advance targets with legacy payroll.advance = 0; (3) the activity-log createMany needs its own wipe guard for idempotency; (4) Transaction.payrollId (not Payroll.salaryTransactionId) is how to find a payroll's linked salary expense.
