@@ -157,7 +157,8 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null)
   const [errorShake, setErrorShake] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [showAccounts, setShowAccounts] = useState(false)
+  // Open by default so the owner always sees the available accounts on arrival.
+  const [showAccounts, setShowAccounts] = useState(true)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [bootstrap, setBootstrap] = useState<BootstrapState>({ status: 'checking' })
 
@@ -224,20 +225,20 @@ export function LoginScreen() {
     })
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  /** Core sign-in routine shared by the form submit and the one-click buttons. */
+  async function performSignIn(mail: string, pass: string) {
     setError(null)
     setLoading(true)
     try {
       const res = await api.post<{ user: SessionUser; token?: string }>('/api/auth/login', {
-        email,
-        password,
+        email: mail,
+        password: pass,
       })
       // Store the session token for iframe contexts (preview panel) where
       // cookies are blocked — sent as Authorization: Bearer by api-client.
       setAuthToken(res.token ?? null)
       try {
-        if (remember) window.localStorage.setItem(REMEMBER_KEY, email.trim())
+        if (remember) window.localStorage.setItem(REMEMBER_KEY, mail.trim())
         else window.localStorage.removeItem(REMEMBER_KEY)
       } catch {
         // ignore storage errors
@@ -249,6 +250,18 @@ export function LoginScreen() {
     } finally {
       setLoading(false)
     }
+  }
+
+  /** One-click sign-in straight from the accounts panel. */
+  function quickSignIn(account: (typeof DEMO_ACCOUNTS)[number]) {
+    setEmail(account.email)
+    setPassword(account.password)
+    void performSignIn(account.email, account.password)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    await performSignIn(email, password)
   }
 
   async function handleCreateAdmin(e: React.FormEvent) {
@@ -482,6 +495,21 @@ export function LoginScreen() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => quickSignIn(account)}
+                        disabled={loading}
+                        className={cn(
+                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100',
+                          account.highlight
+                            ? 'bg-[#D4AF37]/15 text-[#8B6F1F] ring-1 ring-[#D4AF37]/40 hover:bg-[#D4AF37]/25 dark:text-[#D4AF37]'
+                            : 'text-muted-foreground/50 hover:bg-muted hover:text-foreground'
+                        )}
+                        aria-label={`Sign in directly as ${account.role}`}
+                        title={`Sign in directly as ${account.role}`}
+                      >
+                        <LogIn className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => copyAccount(key, account.email, account.password)}
                         className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-all hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-focus md:opacity-0 md:group-hover:opacity-100"
                         aria-label={`Copy ${account.role} credentials`}
@@ -497,7 +525,7 @@ export function LoginScreen() {
                   )
                 })}
                 <p className="px-1 pt-0.5 pb-0.5 text-center text-[10px] leading-relaxed text-muted-foreground/70">
-                  Click any account to auto-fill — demo data, safe to explore
+                  Click a row to fill the form · click the ⇥ icon to sign in instantly
                 </p>
               </div>
             ) : null}

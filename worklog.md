@@ -1477,3 +1477,25 @@ Stage Summary:
 - v15 feature set fully restored on top of the re-seeded core data: all Business Documents modules populated with realistic Saudi manpower-company demo data, project client rates back (Client Salary Summary works without the mass fallback warning), advances module has live pending/partial/deducted examples with correct accounting.
 - `scripts/restore-demo-docs.ts` is the canonical doc-data restore: run `bun run db:seed` FIRST (core), THEN `bun scripts/create-login.ts` (owner login), THEN `bun scripts/restore-demo-docs.ts` (documents + rates + advances). Order matters.
 - Gotchas for future agents: (1) never seed "old fully-deducted" advances without historical payroll rows — expectedAdvanceForPayroll simulates from deduction rows, not stored balances → false stale flags; (2) pick advance targets with legacy payroll.advance = 0; (3) the activity-log createMany needs its own wipe guard for idempotency; (4) Transaction.payrollId (not Payroll.salaryTransactionId) is how to find a payroll's linked salary expense.
+
+---
+Task ID: R11
+Agent: main (Z.ai Code)
+Task: User reported "everything from all my prompts is gone — where did it all go?" (v15+ content missing). Full diagnosis + fix.
+
+Work Log:
+- Diagnosed: dev server running (no restarts since 10:50), dev.log 100% clean (134×200, 1×400, zero errors), DB fully populated (4 users, 4 roles, 40 staff, 6 projects, 32 payrolls, 1346 attendance, 72 transactions, 5 quotations, 4 supplier POs, invoices, VAT bills, agreements, name lists, advances, 22 sessions).
+- Root cause: user lands on the LOGIN SCREEN (session/token cleared after earlier dev-server restarts / preview refresh) and the "Demo access accounts" panel was collapsed by default — so the user saw only a bare login form and concluded all their work disappeared. No data was ever lost.
+- E2E verified via agent-browser: login → Dashboard (all 7 KPIs + Document Compliance + charts) → Staff List (39 staff, rates) → Payroll (Gross SAR 370,402.50 / Net SAR 344,403.65) → Quotations → Invoices (INV-2026-0005) → Supplier P.O. (PO-2026-0003) → Clients → Worker Deployment → VAT Return Expense → Agreements → Name List. All render with real data.
+- Fixed login-screen.tsx:
+  1. `showAccounts` now defaults to `true` — the accounts panel is OPEN on arrival, credentials immediately visible.
+  2. Extracted `performSignIn(mail, pass)` core routine (shared by form submit + one-click).
+  3. Added `quickSignIn(account)` + a one-click "Sign in directly as X" LogIn-icon button on EVERY account row (gold-styled on the Owner row). Row click still fills the form; arrow button signs in instantly.
+  4. Updated panel footer hint: "Click a row to fill the form · click the ⇥ icon to sign in instantly".
+- Verified: one-click owner sign-in goes straight to Dashboard; lint clean; VLM screenshot review of desktop + mobile (390×844) login page — panel expanded, rows well laid out, no glitches.
+
+Stage Summary:
+- NOTHING was lost — all modules, data and credentials intact. The issue was the login wall + collapsed credentials panel confusing the owner.
+- Login page now shows the 4 accounts expanded by default with one-click sign-in (arrow icon per row; Owner highlighted gold with "You" badge).
+- Owner entry: click "Sign in directly as Owner · Super Admin" (or row → Sign in) with admin@landmarkintergulf.com / Landmark@2025.
+- If the user ever reports "empty app" again: check /api/bootstrap (needsBootstrap=false), confirm DB counts, and remind them to sign in — data lives server-side and survives restarts.
