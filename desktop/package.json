@@ -1,8 +1,8 @@
 {
   "name": "landmark-inter-gulf-hr",
   "productName": "Landmark Inter Gulf HR",
-  "version": "1.0.0",
-  "description": "Landmark Inter Gulf — Workforce, Payroll & Accounts (offline desktop edition)",
+  "version": "1.1.0",
+  "description": "Landmark Inter Gulf — Workforce, Payroll & Accounts (online desktop client for your own VPS)",
   "main": "electron/main.js",
   "author": "Landmark Inter Gulf",
   "license": "UNLICENSED",
@@ -26,16 +26,18 @@
       "electron/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "resources-app",
-        "to": "app"
-      },
-      {
-        "from": "seed-db",
-        "to": "seed-db"
-      }
-    ],
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
+      ],
+      "category": "public.app-category.business",
+      "icon": "build/icon.png",
+      "identity": null,
+      "artifactName": "Landmark-Inter-Gulf-HR-${version}-Mac-${arch}.${ext}"
+    },
     "win": {
       "target": [
         {

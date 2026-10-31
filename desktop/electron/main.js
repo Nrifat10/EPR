@@ -1,22 +1,21 @@
-const { app, BrowserWindow, dialog, Menu } = require('electron')
-const { spawn } = require('child_process')
+const { app, BrowserWindow, Menu, ipcMain } = require('electron')
 const path = require('path')
 const fs = require('fs')
-const http = require('http')
-const net = require('net')
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Landmark Inter Gulf HR — desktop shell.
+// Landmark Inter Gulf HR — ONLINE desktop client (v1.1.0+).
 //
-// Architecture: Electron window ⇄ local Next.js standalone server (child
-// process run with Electron's embedded Node via ELECTRON_RUN_AS_NODE=1).
-// SQLite DB lives in %APPDATA%/Landmark Inter Gulf HR/db/custom.db; on first
-// run it is seeded from the packaged snapshot (resources/seed-db/custom.db).
+// This edition is a native window into the company's own hosted server (VPS).
+// It runs NO local server and NO local database — all data lives on the server,
+// so every device (PC, Mac, phone) always sees the same live data.
+//
+// On first launch a small setup screen asks for the server address
+// (e.g. https://hr.example.com). It is stored in userData/config.json and can
+// be changed any time with Ctrl+Shift+S (or from the connection-error screen).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const START_PORT = 3847
-let serverProc = null
 let mainWindow = null
+let configWindow = null
 let quitting = false
 
 function log(...args) {
@@ -28,108 +27,65 @@ function log(...args) {
   } catch {}
 }
 
-function findFreePort(start) {
-  return new Promise((resolve, reject) => {
-    const tryPort = (p) => {
-      if (p > start + 25) return reject(new Error('No free port found'))
-      const srv = net.createServer()
-      srv.once('error', () => tryPort(p + 1))
-      srv.once('listening', () => srv.close(() => resolve(p)))
-      srv.listen(p, '127.0.0.1')
-    }
-    tryPort(start)
-  })
+function configPath() {
+  return path.join(app.getPath('userData'), 'config.json')
 }
 
-function resourcesRoot() {
-  return process.resourcesPath || path.join(__dirname, '..')
+function readConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(configPath(), 'utf8'))
+  } catch {
+    return {}
+  }
 }
 
-function prepareDatabase() {
-  const userData = app.getPath('userData')
-  const dbDir = path.join(userData, 'db')
-  const dbPath = path.join(dbDir, 'custom.db')
-  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true })
-  if (!fs.existsSync(dbPath)) {
-    const seed = path.join(resourcesRoot(), 'seed-db', 'custom.db')
-    if (fs.existsSync(seed)) {
-      fs.copyFileSync(seed, dbPath)
-      log('database seeded from packaged snapshot')
-    } else {
-      fs.writeFileSync(dbPath, '')
-      log('WARNING: no packaged seed DB — created empty database')
+function saveConfig(cfg) {
+  try {
+    fs.mkdirSync(path.dirname(configPath()), { recursive: true })
+    fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2))
+  } catch (e) {
+    log('failed to save config:', e.message)
+  }
+}
+
+function normalizeUrl(raw) {
+  let url = String(raw || '').trim()
+  if (!url) return null
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url
+  url = url.replace(/\/+$/, '')
+  return url
+}
+
+// Probe the server: any HTTP response means "a server is there".
+async function checkServer(url) {
+  const attempt = async (u) => {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 10000)
+    try {
+      const res = await fetch(u + '/', { signal: ctrl.signal, redirect: 'follow' })
+      return { ok: true, status: res.status }
+    } catch (e) {
+      return { ok: false, message: e && e.name === 'AbortError' ? 'timed out' : ((e && e.message) || 'unreachable') }
+    } finally {
+      clearTimeout(timer)
     }
   }
-  return dbPath
+  let r = await attempt(url)
+  if (r.ok) return { ok: true, url }
+  if (/^https:\/\//i.test(url)) {
+    const httpUrl = url.replace(/^https:\/\//i, 'http://')
+    const r2 = await attempt(httpUrl)
+    if (r2.ok) return { ok: true, url: httpUrl }
+    return { ok: false, message: `${r.message} / ${r2.message}` }
+  }
+  return { ok: false, message: r.message }
 }
 
-function startServer(dbPath, port) {
-  return new Promise((resolve, reject) => {
-    const appDir = path.join(resourcesRoot(), 'app')
-    const serverJs = path.join(appDir, 'server.js')
-    if (!fs.existsSync(serverJs)) {
-      return reject(new Error(`server.js not found at ${serverJs}`))
-    }
-
-    const env = {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      ELECTRON_NO_ATTACH_CONSOLE: '1',
-      NODE_ENV: 'production',
-      PORT: String(port),
-      HOSTNAME: '127.0.0.1',
-      DATABASE_URL: 'file:' + dbPath.split(path.sep).join('/'),
-    }
-
-    try {
-      serverProc = spawn(process.execPath, [serverJs], {
-        cwd: appDir,
-        env,
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
-    } catch (e) {
-      return reject(e)
-    }
-
-    try {
-      const logStream = fs.createWriteStream(path.join(app.getPath('userData'), 'server.log'), {
-        flags: 'a',
-      })
-      serverProc.stdout.pipe(logStream)
-      serverProc.stderr.pipe(logStream)
-    } catch {}
-
-    serverProc.on('exit', (code) => log('server process exited, code =', code))
-    serverProc.on('error', (e) => log('server process error:', e.message))
-
-    const t0 = Date.now()
-    const poll = () => {
-      if (quitting) return reject(new Error('shutting down'))
-      const req = http.get(
-        { host: '127.0.0.1', port, path: '/api/bootstrap', timeout: 2500 },
-        (res) => {
-          res.resume()
-          if (res.statusCode && res.statusCode < 500) return resolve(port)
-          retry()
-        }
-      )
-      req.on('error', retry)
-      req.on('timeout', () => {
-        req.destroy()
-        retry()
-      })
-    }
-    const retry = () => {
-      if (Date.now() - t0 > 45000) {
-        reject(new Error('The local server did not become ready within 45 seconds.'))
-      } else setTimeout(poll, 400)
-    }
-    poll()
-  })
-}
-
-function createWindow(port) {
+function openMainWindow(serverUrl) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(serverUrl)
+    return
+  }
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -139,18 +95,41 @@ function createWindow(port) {
     backgroundColor: '#0b1220',
     show: false,
     autoHideMenuBar: true,
-    icon: path.join(resourcesRoot(), 'app', 'public', 'logo.png'),
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   })
   Menu.setApplicationMenu(null)
-  mainWindow.loadURL(`http://127.0.0.1:${port}/`)
+  mainWindow.loadURL(serverUrl)
   mainWindow.once('ready-to-show', () => mainWindow.show())
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, _url, isMain) => {
+    if (!isMain || code === -3 || quitting) return
+    log('main frame failed to load:', code, desc)
+    mainWindow
+      .loadFile(path.join(__dirname, 'error.html'), { query: { code: String(code), desc: desc || '' } })
+      .catch(() => {})
+  })
+  mainWindow.webContents.on('before-input-event', (e, input) => {
+    if (
+      input.type === 'keyDown' &&
+      input.control &&
+      input.shift &&
+      !input.alt &&
+      !input.meta &&
+      input.key.toLowerCase() === 's'
+    ) {
+      e.preventDefault()
+      openConfigWindow(false)
+    }
+  })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\/127\.0\.0\.1/.test(url)) return { action: 'allow' }
+    const cfg = readConfig()
+    const base = String(cfg.serverUrl || '').replace(/\/+$/, '')
+    if (base && url.startsWith(base)) return { action: 'allow' }
     return { action: 'deny' }
   })
   mainWindow.on('closed', () => {
@@ -158,31 +137,88 @@ function createWindow(port) {
   })
 }
 
+function openConfigWindow(firstRun) {
+  if (configWindow && !configWindow.isDestroyed()) {
+    configWindow.focus()
+    return
+  }
+  configWindow = new BrowserWindow({
+    width: 640,
+    height: 520,
+    resizable: false,
+    maximizable: false,
+    title: 'Landmark Inter Gulf HR — Server Address',
+    backgroundColor: '#0b1220',
+    show: false,
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, 'icon.png'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  })
+  configWindow.setMenuBarVisibility(false)
+  configWindow.loadFile(path.join(__dirname, 'config.html'), {
+    query: firstRun ? { first: '1' } : {},
+  })
+  configWindow.once('ready-to-show', () => configWindow.show())
+  configWindow.on('closed', () => {
+    configWindow = null
+  })
+}
+
+ipcMain.handle('lmhr:connect', async (_e, rawUrl, force) => {
+  const url = normalizeUrl(rawUrl)
+  if (!url) return { ok: false, message: 'Please type the server address.' }
+  let result = { ok: true, url }
+  if (!force) {
+    result = await checkServer(url)
+  }
+  saveConfig({
+    serverUrl: result.ok ? result.url : url,
+    savedAt: new Date().toISOString(),
+    checked: !!result.ok,
+  })
+  log('config saved:', result.ok ? result.url : url, '(checked:', result.ok, ')')
+  if (result.ok) {
+    if (configWindow && !configWindow.isDestroyed()) configWindow.close()
+    openMainWindow(result.url)
+    return { ok: true }
+  }
+  return { ok: false, message: result.message || 'Server not reachable.' }
+})
+
+ipcMain.on('lmhr:retry', () => {
+  const cfg = readConfig()
+  if (cfg.serverUrl && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(cfg.serverUrl)
+  }
+})
+
+ipcMain.on('lmhr:open-config', () => {
+  openConfigWindow(false)
+})
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
+    const w = configWindow && !configWindow.isDestroyed() ? configWindow : mainWindow
+    if (w) {
+      if (w.isMinimized()) w.restore()
+      w.focus()
     }
   })
 
-  app.whenReady().then(async () => {
-    try {
-      const dbPath = prepareDatabase()
-      const port = await findFreePort(START_PORT)
-      log('starting server on port', port, 'db =', dbPath)
-      await startServer(dbPath, port)
-      createWindow(port)
-    } catch (e) {
-      log('FATAL:', e.message)
-      dialog.showErrorBox(
-        'Landmark Inter Gulf HR — failed to start',
-        `${e.message}\n\nCheck the log file for details:\n${path.join(app.getPath('userData'), 'server.log')}`
-      )
-      app.quit()
+  app.whenReady().then(() => {
+    log('app ready (online client)')
+    const cfg = readConfig()
+    if (cfg.serverUrl) {
+      openMainWindow(cfg.serverUrl)
+    } else {
+      openConfigWindow(true)
     }
   })
 
@@ -192,11 +228,5 @@ if (!gotLock) {
 
   app.on('before-quit', () => {
     quitting = true
-    if (serverProc) {
-      try {
-        serverProc.kill()
-      } catch {}
-      serverProc = null
-    }
   })
 }

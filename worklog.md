@@ -1629,3 +1629,22 @@ Stage Summary:
 - Windows installer ready: install → desktop shortcut → app window opens with full system + current data.
 - Logins in packaged DB: admin@example.com/password (NEW, Super Admin), admin@landmarkintergulf.com/Landmark@2025, accountant/hr/viewer @2025.
 - NOT verifiable in sandbox: running the .exe itself (Windows-only) — all components individually verified. Unsigned exe → SmartScreen may show "More info → Run anyway".
+
+---
+Task ID: R17-online-client
+Agent: Z (main agent)
+Task: User decided (after offline-sync discussion) to go ONLINE-ONLY: "শুধু অনলাইনি বানানো সেভ তবে". Build the VPS-connected desktop client for Windows AND macOS (user has MacBook Air M4). Subdomain URL still not provided -> app ships with a built-in first-run server-address screen instead of a hard-coded URL.
+
+Work Log:
+- Rewrote desktop/electron/main.js as an ONLINE client: no local server, no DB. First run opens a config window (config.html, bilingual EN/BN) asking for the server address; main process normalizes it (adds https://, strips slash), health-checks with fetch (https -> http fallback, 10s timeout), stores it in userData/config.json, then opens the main window. Connection failures load error.html (Retry / Change address). Server address changeable any time via Ctrl+Shift+S / Cmd+Shift+S (before-input-event). Window-open handler only allows same-origin popups; single-instance + logs kept. preload.js exposes lmhr{connect,retry,openConfig} via contextBridge.
+- desktop/package.json -> v1.1.0: description "online desktop client for your own VPS", extraResources REMOVED entirely (no payload/seed-db), added mac target {zip, arm64, identity:null, category business, artifactName ...-Mac-arm64.zip}; win/nsis unchanged (Setup-1.1.0.exe).
+- Platform had wiped desktop/node_modules + download/ again; re-ran npm ci, re-applied the NsisTarget.js pure-JS UninstallerReader patch (wine-less NSIS), rebuilds succeeded.
+- Builds: dist/Landmark-Inter-Gulf-HR-Setup-1.1.0.exe (120,362,726 bytes) and dist/Landmark-Inter-Gulf-HR-1.1.0-Mac-arm64.zip (117,017,812 bytes; codesign skipped on Linux as expected).
+- Verified: win payload contains ONLY resources/app.asar (44KB, asar = electron/{main,preload,config,error,icon} + package.json) + elevate.exe, no server payload/seed-db. Mac: proper .app bundle, 14 Framework symlinks preserved, main binary = Mach-O 64-bit arm64 (correct for M-series).
+- Published GitHub Release v1.1.0 (id 430217327) with both assets; direct download URLs verified HTTP 200. Copies also placed in download/.
+- Sandbox app on :3000 confirmed alive (200).
+
+Stage Summary:
+- v1.1.0 = online-only client (Windows exe + Mac arm64 zip) with user-configurable server address; data 100% on their VPS, all devices in sync.
+- v1.0.0 offline edition remains on the v1.0.0 release for fallback use.
+- Open item: once user shares the real subdomain, no rebuild needed - they paste it in the first-run screen (or Ctrl+Shift+S).

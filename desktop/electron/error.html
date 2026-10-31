@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'" />
+<title>Landmark Inter Gulf HR — Connection Problem</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, "Segoe UI", "Nirmala UI", "Bangla MN", "Vrinda", sans-serif;
+    background: #0b1220; color: #e5eaf3; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 520px; max-width: 92vw; background: #111a2e;
+    border: 1px solid #223050; border-radius: 14px; padding: 32px;
+    text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+  }
+  img { width: 52px; height: 52px; object-fit: contain; margin-bottom: 14px; }
+  h1 { font-size: 18px; color: #fff; margin-bottom: 10px; }
+  p { font-size: 13.5px; color: #9db0cf; line-height: 1.65; margin-bottom: 6px; }
+  .err { font-size: 12px; color: #f87171; margin: 12px 0 4px; word-break: break-word; }
+  .row { display: flex; gap: 10px; margin-top: 18px; }
+  button {
+    flex: 1; padding: 11px; font-size: 14px; font-weight: 700; color: #fff;
+    background: #2f6fed; border: none; border-radius: 8px; cursor: pointer;
+  }
+  button:hover { background: #2a63d6; }
+  button.ghost { background: #1c2942; border: 1px solid #31456e; color: #cbd7ee; font-weight: 600; }
+  button.ghost:hover { background: #243453; }
+  .foot { margin-top: 16px; font-size: 11.5px; color: #66799c; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img src="icon.png" alt="logo" />
+    <h1>Cannot reach the server · সার্ভারে পৌঁছানো যাচ্ছে না</h1>
+    <p>Check your internet connection, or the server may be temporarily down.<br/>
+    ইন্টারনেট সংযোগ দেখুন, অথবা সার্ভার সাময়িক বন্ধ থাকতে পারে।</p>
+    <div class="err" id="detail"></div>
+    <div class="row">
+      <button id="retry" type="button">Retry · আবার চেষ্টা করুন</button>
+      <button id="change" class="ghost" type="button">Change address · ঠিকানা বদলান</button>
+    </div>
+    <div class="foot">Tip: change the server address any time with Ctrl+Shift+S (Mac: ⌘+Shift+S)</div>
+  </div>
+  <script>
+    const q = new URLSearchParams(location.search)
+    document.getElementById('detail').textContent =
+      q.get('desc') ? ('Error ' + q.get('code') + ': ' + q.get('desc')) : ''
+    document.getElementById('retry').addEventListener('click', () => window.lmhr.retry())
+    document.getElementById('change').addEventListener('click', () => window.lmhr.openConfig())
+  </script>
+</body>
+</html>
