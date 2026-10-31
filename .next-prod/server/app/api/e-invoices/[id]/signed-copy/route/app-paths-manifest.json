@@ -1,0 +1,3 @@
+{
+  "/api/e-invoices/[id]/signed-copy/route": "app/api/e-invoices/[id]/signed-copy/route.js"
+}

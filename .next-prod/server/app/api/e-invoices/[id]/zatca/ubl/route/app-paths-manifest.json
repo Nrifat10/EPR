@@ -1,0 +1,3 @@
+{
+  "/api/e-invoices/[id]/zatca/ubl/route": "app/api/e-invoices/[id]/zatca/ubl/route.js"
+}

@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/quotations/[id]/excel/route.js")
+R.c("server/chunks/[root-of-the-server]__c7fc8f7a._.js")
+R.c("server/chunks/[root-of-the-server]__9904168b._.js")
+R.c("server/chunks/node_modules_next_dist_esm_build_templates_app-route_ec5364e1.js")
+R.c("server/chunks/[root-of-the-server]__24f8fcd9._.js")
+R.c("server/chunks/node_modules_xlsx_xlsx_mjs_539ebb60._.js")
+R.c("server/chunks/node_modules_next_f2da0d3e._.js")
+R.c("server/chunks/_next-internal_server_app_api_quotations_[id]_excel_route_actions_70254232.js")
+R.m(26248)
+module.exports=R.m(26248).exports

@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/f2c919a5548115e7.js"],"ViewportBoundary"]
+3:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/f2c919a5548115e7.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+5:I[27201,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/f2c919a5548115e7.js"],"IconMark"]
+0:{"buildId":"KQBuTDglbUam2rivIJI__","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Landmark Inter Gulf — Workforce, Payroll & Accounts"}],["$","meta","1",{"name":"description","content":"Admin system for construction workforce supply: projects, staff, attendance, monthly payroll, salary slips & sheets, and company accounting (SAR)."}],["$","meta","2",{"name":"keywords","content":"workforce,payroll,construction,SAR,salary sheet,attendance"}],["$","link","3",{"rel":"icon","href":"/icon.png?icon.3aca7d7c.png","sizes":"512x512","type":"image/png"}],["$","$L5","4",{}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}

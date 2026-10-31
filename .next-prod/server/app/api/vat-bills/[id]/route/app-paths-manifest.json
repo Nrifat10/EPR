@@ -1,0 +1,3 @@
+{
+  "/api/vat-bills/[id]/route": "app/api/vat-bills/[id]/route.js"
+}

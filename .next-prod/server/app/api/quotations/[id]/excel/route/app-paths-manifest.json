@@ -1,0 +1,3 @@
+{
+  "/api/quotations/[id]/excel/route": "app/api/quotations/[id]/excel/route.js"
+}
