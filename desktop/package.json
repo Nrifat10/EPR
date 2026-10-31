@@ -32,6 +32,10 @@
         "to": "app"
       },
       {
+        "from": "resources-nm",
+        "to": "app/node_modules"
+      },
+      {
         "from": "seed-db",
         "to": "seed-db"
       }

@@ -1629,3 +1629,24 @@ Stage Summary:
 - Windows installer ready: install → desktop shortcut → app window opens with full system + current data.
 - Logins in packaged DB: admin@example.com/password (NEW, Super Admin), admin@landmarkintergulf.com/Landmark@2025, accountant/hr/viewer @2025.
 - NOT verifiable in sandbox: running the .exe itself (Windows-only) — all components individually verified. Unsigned exe → SmartScreen may show "More info → Run anyway".
+
+---
+Task ID: R16b-exe-rebuild-release
+Agent: Z (main agent)
+Task: User reported "Software Download option nei" — the download/ payload (Setup exe) was lost in the sandbox recycle; rebuild the Windows installer and provide a reliable download link.
+
+Work Log:
+- Found download/ + desktop/node_modules + desktop/dist gone after recycle; .next-prod standalone skeleton, desktop/electron/main.js, desktop/package.json, db/custom.db survived.
+- npm ci in desktop/ (electron 45.2.1 + electron-builder 26.18.0, lockfile-pinned).
+- Rebuilt standalone/node_modules from 226 NFT traces (new scripts/assemble-standalone.js, phase trace): 1454 files; skipped exactly the 2 dangling @prisma/client-2c3a283f134fdcb6 trace entries; safety-net full copies of @prisma/client, .prisma, sharp.
+- ROOT-CAUSED last build's mystery: Turbopack externalizes @prisma/client as the hashed package "@prisma/client-2c3a283f134fdcb6" which compiled chunks require at runtime — it must exist under standalone/.next-prod/node_modules/. Created a re-export proxy package (module.exports = require("@prisma/client")) there. Standalone sanity on :3200 then passed: / 200, /api/bootstrap 200, login 200.
+- winify phase (scripts/assemble-standalone.js winify): removed all linux natives; npm pack @img/sharp-win32-x64@0.34.5 into payload; only windows natives remain (prisma dll + 3 sharp files). Payload node_modules = 158MB.
+- prepare-desktop-db.ts regenerated desktop/seed-db/custom.db (live DB copy + admin@example.com/password as Super Admin; 5 active logins).
+- Patched NsisTarget.js (app-builder-lib): always pure-JS UninstallerReader.exec, no wine. AVOIDED the old filter.js patch entirely via a packaging scheme change: resources-app (server skeleton — its node_modules child is hard-skipped by electron-builder) + resources-nm (node_modules CONTENTS shipped via extraResources to app/node_modules); desktop/package.json extraResources now has 3 entries.
+- Build: npx electron-builder --win nsis --x64 -> dist/Landmark-Inter-Gulf-HR-Setup-1.0.0.exe (167,633,432 bytes). Extraction-verified payload: electron exe + resources/app.asar + resources/app/{server.js,.next-prod(BUILD_ID/server/static),public,node_modules} + resources/seed-db/custom.db (1.2M); ZERO linux natives; prisma alias proxy present at app/.next-prod/node_modules/.
+- Delivered to download/ AND published to GitHub Releases: https://github.com/Nrifat10/EPR/releases/tag/v1.0.0 — asset state=uploaded (167,633,432 bytes), public HEAD check 200. EPR repo is PUBLIC, so the release asset URL is a direct download for anyone, no auth needed.
+- Restarted sandbox dev server (:3000 → 200/200). .gitignore += desktop/resources-nm/.
+
+Stage Summary:
+- The installer now has a permanent, size-limit-free download channel: the EPR GitHub release.
+- Reproducible rebuild: node scripts/assemble-standalone.js trace && sanity && winify; bun scripts/prepare-desktop-db.ts; cd desktop && npx electron-builder --win nsis --x64.
