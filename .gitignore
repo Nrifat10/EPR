@@ -72,3 +72,9 @@ Caddyfile
 
 # sibling repo clones (managed separately)
 EPR/
+
+# desktop packaging artifacts (regenerable)
+desktop/resources-app/
+desktop/seed-db/
+desktop/dist/
+desktop/node_modules/

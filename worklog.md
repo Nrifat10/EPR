@@ -1606,3 +1606,26 @@ Work Log:
 Stage Summary:
 - EPR IS the up-to-date mirror now (everything incl. latest ops commits); one command keeps both repos synced: bash scripts/sync-github.sh ["message"].
 - To update landmarkfinace/HR01 as well, provide a PAT with write access to that repo.
+
+---
+Task ID: R16-desktop-exe
+Agent: Z (main agent)
+Task: User request (Bengali) — package the project as a full Windows .exe installer software. Clarified via AskUserQuestion: desktop-window app (Electron), CURRENT live data, demo logins enabled, name "Landmark Inter Gulf HR".
+
+Work Log:
+- next.config.ts: distDir now env-configurable (NEXT_DIST_DIR) so production builds never clobber the running dev server's .next.
+- prisma/schema.prisma: binaryTargets = ["native", "windows"] → query_engine-windows.dll.node generated.
+- Production build → .next-prod (standalone). Manually assembled dist into standalone/.next-prod (Next 16 does not copy custom-distDir output into standalone itself): BUILD_ID, manifests, server/, static/ + public/.
+- Standalone sanity-tested on Linux :3200 → / 200, /api/bootstrap 200, login 200 (sessions written) — then stopped.
+- Windows-ified standalone: swapped @img/sharp-linux* → @img/sharp-win32-x64 (0.34.5, libvips DLLs bundled), removed debian prisma engines + schema-engine; verified ONLY windows natives remain.
+- desktop/ Electron shell: electron/main.js (single-instance; seeds %APPDATA%/Landmark Inter Gulf HR/db/custom.db from resources/seed-db on first run; spawns server.js via ELECTRON_RUN_AS_NODE=1 on free port 3847+; waits for /api/bootstrap; frameless-menu BrowserWindow 1440x900 w/ logo icon; logs to userData). package.json with electron-builder config (NSIS assisted, shortcuts, artifactName Landmark-Inter-Gulf-HR-Setup-1.0.0.exe, signAndEditExecutable:false — no wine).
+- scripts/prepare-desktop-db.ts: copies live DB → desktop/seed-db + upserts admin@example.com / password as Super Admin (user chose demo logins + current data).
+- electron-builder 26.18 on Linux — THREE environment fixes, all documented in-node_modules patches: (1) dangling NFT symlink @prisma/client-<hash> removed; (2) uninstaller generation: patched NsisTarget.js to always use pure-JS UninstallerReader.exec instead of spawning wine (no wine, no sudo in sandbox); (3) filter.js hard-skipped ANY root node_modules → patched to allow it (app-bundle asar still protected by explicit !**/node_modules/** patterns) so the standalone's node_modules ships via extraResources.
+- Final payload verified by extracting Setup.exe: app-64.7z contains Landmark Inter Gulf HR.exe, resources/app.asar (main), resources/app (standalone: server.js + .next-prod + public + node_modules incl. windows prisma dll + sharp-win32), resources/seed-db/custom.db. Zero linux binaries.
+- Installer: desktop/dist/Landmark-Inter-Gulf-HR-Setup-1.0.0.exe ≈ 160 MiB → delivered to download/. Also removed stray .env (sandbox DATABASE_URL) from resources-app before final build.
+- Sandbox app untouched and still live on :3000 (200).
+
+Stage Summary:
+- Windows installer ready: install → desktop shortcut → app window opens with full system + current data.
+- Logins in packaged DB: admin@example.com/password (NEW, Super Admin), admin@landmarkintergulf.com/Landmark@2025, accountant/hr/viewer @2025.
+- NOT verifiable in sandbox: running the .exe itself (Windows-only) — all components individually verified. Unsigned exe → SmartScreen may show "More info → Run anyway".

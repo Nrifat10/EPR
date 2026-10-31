@@ -1,5 +1,8 @@
 generator client {
   provider = "prisma-client-js"
+  // "windows" bundles the query engine DLL needed by the packaged
+  // Windows desktop build (Electron + NSIS installer).
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {

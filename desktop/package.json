@@ -1,0 +1,60 @@
+{
+  "name": "landmark-inter-gulf-hr",
+  "productName": "Landmark Inter Gulf HR",
+  "version": "1.0.0",
+  "description": "Landmark Inter Gulf — Workforce, Payroll & Accounts (offline desktop edition)",
+  "main": "electron/main.js",
+  "author": "Landmark Inter Gulf",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.landmarkintergulf.hr",
+    "productName": "Landmark Inter Gulf HR",
+    "copyright": "Copyright © Landmark Inter Gulf",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources-app",
+        "to": "app"
+      },
+      {
+        "from": "seed-db",
+        "to": "seed-db"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Landmark Inter Gulf HR",
+      "artifactName": "Landmark-Inter-Gulf-HR-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
